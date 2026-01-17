@@ -3,29 +3,13 @@
 import { useState, useEffect } from 'react'
 import { PostCard } from '@/components/PostCard'
 import { Loader2, AlertCircle, FileX } from 'lucide-react'
+import type { BlogPost } from '@/lib/firestore'
 
 type StatusFilter = 'all' | 'draft' | 'published'
 
-interface Post {
-  id: string
-  title: string
-  content: string
-  excerpt: string
-  thumbnail: string
-  keywords: string[]
-  status: 'draft' | 'published'
-  platform: 'tistory' | 'naver' | 'both'
-  createdAt: any
-  updatedAt: any
-  metadata?: {
-    originalPath?: string
-    wordCount?: number
-  }
-}
-
 export default function HomePage() {
   const [filter, setFilter] = useState<StatusFilter>('all')
-  const [posts, setPosts] = useState<Post[]>([])
+  const [posts, setPosts] = useState<BlogPost[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
