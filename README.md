@@ -147,3 +147,4 @@ editor-app/
 └── scripts/
     └── migrate.py          # 마이그레이션 스크립트
 ```
+
