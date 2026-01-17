@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
       keywords: body.keywords || [],
       products,
       status: body.status || 'draft',
-      platform: body.platform || 'both',
       createdAt: now,
       updatedAt: now,
       metadata: body.metadata || { wordCount: 0 },

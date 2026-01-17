@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/components/AuthProvider'
 import { Header } from '@/components/Header'
+import { ThemeProvider } from '@/components/ThemeProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -17,16 +18,18 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <body className={inter.className}>
-        <AuthProvider>
-          <div className="min-h-screen bg-gray-50">
-            <Header />
-            <main className="max-w-7xl mx-auto px-4 py-6">
-              {children}
-            </main>
-          </div>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+              <Header />
+              <main className="max-w-7xl mx-auto px-4 py-6">
+                {children}
+              </main>
+            </div>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

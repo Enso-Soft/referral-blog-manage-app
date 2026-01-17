@@ -12,7 +12,7 @@ Blog Editor App - A web application for managing and editing blog content with H
 - **Styling**: Tailwind CSS
 - **Editor**: Monaco (HTML code editor)
 - **Database**: Firebase Firestore (client SDK for frontend, Admin SDK for API routes)
-- **Deployment**: Vercel
+- **Deployment**: Amplify
 
 ## Commands
 

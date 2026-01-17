@@ -32,15 +32,15 @@
 }
 
 .tiptap blockquote {
-  @apply border-l-4 border-gray-300 pl-4 my-4 italic;
+  @apply border-l-4 border-gray-300 dark:border-gray-600 pl-4 my-4 italic;
 }
 
 .tiptap pre {
-  @apply bg-gray-800 text-white rounded-lg p-4 my-4 overflow-x-auto;
+  @apply bg-gray-800 dark:bg-gray-900 text-white rounded-lg p-4 my-4 overflow-x-auto;
 }
 
 .tiptap code {
-  @apply bg-gray-100 rounded px-1 py-0.5 text-sm font-mono;
+  @apply bg-gray-100 dark:bg-gray-700 dark:text-gray-200 rounded px-1 py-0.5 text-sm font-mono;
 }
 
 .tiptap img {
@@ -53,19 +53,19 @@
 
 .tiptap th,
 .tiptap td {
-  @apply border border-gray-300 p-2;
+  @apply border border-gray-300 dark:border-gray-600 p-2;
 }
 
 .tiptap th {
-  @apply bg-gray-100 font-bold;
+  @apply bg-gray-100 dark:bg-gray-700 font-bold;
 }
 
 .tiptap a {
-  @apply text-blue-600 underline;
+  @apply text-blue-600 dark:text-blue-400 underline;
 }
 
 .tiptap hr {
-  @apply my-6 border-gray-300;
+  @apply my-6 border-gray-300 dark:border-gray-600;
 }
 
 /* Custom scrollbar */
@@ -75,21 +75,19 @@
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  @apply bg-gray-100 dark:bg-gray-800;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded;
+  @apply bg-gray-300 dark:bg-gray-600 rounded;
 }
 
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
+  @apply bg-gray-400 dark:bg-gray-500;
 }
 
 /* Preview active block highlight */
 .preview-active-block {
-  @apply bg-yellow-50 border-l-4 border-yellow-400 transition-colors duration-200;
-  /* Add padding to ensure border doesn't overlap content and looks nice */
-  /* But be careful not to break layout. Tiptap defaults might help. */
+  @apply bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-600 transition-colors duration-200;
 }

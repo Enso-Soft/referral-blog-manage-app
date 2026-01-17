@@ -14,7 +14,6 @@ export interface BlogPost {
   keywords: string[]
   products?: Product[]     // 제품 목록
   status: 'draft' | 'published'
-  platform: 'tistory' | 'naver' | 'both'
   createdAt: Timestamp
   updatedAt: Timestamp
   metadata: {

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 
-// GET: 사용자 목록 조회 (Admin 전용)
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthFromRequest(request)
@@ -13,20 +12,59 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const db = getDb()
-    const snapshot = await db.collection('users').orderBy('email').get()
+    const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search') || ''
+    const role = searchParams.get('role') || ''
+    const status = searchParams.get('status') || ''
 
-    // 비정규화된 productCount 사용 (N+1 쿼리 방지)
-    const users = snapshot.docs.map((doc) => {
-      const data = doc.data()
-      return {
-        id: doc.id,
-        email: data.email,
-        displayName: data.displayName,
-        role: data.role,
-        assignedProductCount: data.productCount ?? 0,
-      }
-    })
+    const db = getDb()
+    let query = db.collection('users').orderBy('email')
+
+    // Firestore는 복합 필터가 제한적이므로 기본 쿼리 후 메모리에서 필터링
+    const snapshot = await query.get()
+
+    // 각 사용자별 postCount, productCount 병렬 조회
+    let users = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const data = doc.data()
+
+        const [postsCountSnapshot, productsCountSnapshot] = await Promise.all([
+          db.collection('blog_posts').where('userId', '==', doc.id).count().get(),
+          db.collection('products').where('userId', '==', doc.id).count().get(),
+        ])
+
+        return {
+          id: doc.id,
+          email: data.email || '',
+          displayName: data.displayName || '',
+          role: data.role || 'user',
+          status: data.status || 'active',
+          postCount: postsCountSnapshot.data().count,
+          productCount: productsCountSnapshot.data().count,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+        }
+      })
+    )
+
+    // 검색 필터 (email 또는 displayName)
+    if (search) {
+      const searchLower = search.toLowerCase()
+      users = users.filter(
+        (u) =>
+          u.email.toLowerCase().includes(searchLower) ||
+          u.displayName.toLowerCase().includes(searchLower)
+      )
+    }
+
+    // 역할 필터
+    if (role && (role === 'admin' || role === 'user')) {
+      users = users.filter((u) => u.role === role)
+    }
+
+    // 상태 필터
+    if (status && (status === 'active' || status === 'blocked')) {
+      users = users.filter((u) => u.status === status)
+    }
 
     return NextResponse.json({ success: true, users })
   } catch (error) {

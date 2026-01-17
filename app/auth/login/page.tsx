@@ -46,17 +46,17 @@ export default function LoginPage() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <h1 className="text-2xl font-bold text-gray-900 text-center mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 text-center mb-6">
             로그인
           </h1>
 
-          <p className="text-gray-500 text-center mb-6">
+          <p className="text-gray-500 dark:text-gray-400 text-center mb-6">
             Google 계정으로 로그인하세요
           </p>
 
           {error && (
-            <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg mb-4">
+            <div className="text-red-500 dark:text-red-400 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg mb-4">
               {error}
             </div>
           )}
@@ -65,7 +65,7 @@ export default function LoginPage() {
             type="button"
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full py-3 px-4 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="w-full py-3 px-4 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             {loading ? (
               <>

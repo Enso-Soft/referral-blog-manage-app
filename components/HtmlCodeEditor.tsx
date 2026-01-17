@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Editor, { OnMount } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
+import { useTheme } from 'next-themes'
 
 interface HtmlCodeEditorProps {
   content: string
@@ -14,10 +15,13 @@ interface HtmlCodeEditorProps {
 export function HtmlCodeEditor({ content, onChange, onScroll, onCursorLineChange }: HtmlCodeEditorProps) {
   const [mounted, setMounted] = useState(false)
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
+  const { resolvedTheme } = useTheme()
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  const editorTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'light'
 
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor
@@ -49,21 +53,21 @@ export function HtmlCodeEditor({ content, onChange, onScroll, onCursorLineChange
 
   if (!mounted) {
     return (
-      <div className="h-[700px] bg-gray-900 rounded-lg flex items-center justify-center">
+      <div className="h-[700px] bg-gray-900 dark:bg-gray-950 rounded-lg flex items-center justify-center">
         <span className="text-gray-400">에디터 로딩 중...</span>
       </div>
     )
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
       <Editor
         height="700px"
         language="html"
         value={content}
         onChange={(value) => onChange(value || '')}
         onMount={handleEditorDidMount}
-        theme="vs-dark"
+        theme={editorTheme}
         options={{
           minimap: { enabled: true },
           fontSize: 14,

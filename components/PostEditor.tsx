@@ -10,7 +10,7 @@ const HtmlCodeEditor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-96 bg-gray-900 rounded-lg animate-pulse" />
+      <div className="h-96 bg-gray-900 dark:bg-gray-950 rounded-lg animate-pulse" />
     ),
   }
 )
@@ -276,12 +276,12 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
     <div className="space-y-4">
       {/* Mode Tabs */}
       <div className="flex items-center justify-between">
-        <div className="flex bg-gray-100 rounded-lg p-1">
+        <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
           <button
             onClick={() => setMode('split')}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${mode === 'split'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
           >
             <Columns className="w-4 h-4" />
@@ -290,8 +290,8 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
           <button
             onClick={() => setMode('html')}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${mode === 'html'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
           >
             <Code className="w-4 h-4" />
@@ -300,8 +300,8 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
           <button
             onClick={() => setMode('preview')}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${mode === 'preview'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
           >
             <Eye className="w-4 h-4" />
@@ -313,7 +313,7 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
-            className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             원본 복원
           </button>
@@ -334,12 +334,12 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
 
       {/* Tistory Compatibility Warnings */}
       {warnings.length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-yellow-800 font-medium mb-2">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-400 font-medium mb-2">
             <AlertTriangle className="w-4 h-4" />
             티스토리 호환성 경고
           </div>
-          <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
+          <ul className="list-disc list-inside text-sm text-yellow-700 dark:text-yellow-500 space-y-1">
             {warnings.map((warning, i) => (
               <li key={i}>{warning}</li>
             ))}
@@ -358,7 +358,7 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
       {mode === 'split' && (
         <div className="grid grid-cols-2 gap-4">
           <div className="min-h-[700px]">
-            <div className="text-sm font-medium text-gray-500 mb-2">HTML 코드</div>
+            <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">HTML 코드</div>
             <HtmlCodeEditor
               content={content}
               onChange={handleContentChange}
@@ -367,13 +367,13 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
             />
           </div>
           <div className="min-h-[700px]">
-            <div className="text-sm font-medium text-gray-500 mb-2">미리보기</div>
+            <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">미리보기</div>
             <div
               ref={previewRef}
-              className="bg-white border border-gray-200 rounded-lg p-6 h-[700px] overflow-auto"
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 h-[700px] overflow-auto"
             >
               <div
-                className="max-w-none"
+                className="max-w-none text-gray-900 dark:text-gray-100"
                 dangerouslySetInnerHTML={{ __html: content }}
               />
             </div>
@@ -382,9 +382,9 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
       )}
 
       {mode === 'preview' && (
-        <div className="bg-white border border-gray-200 rounded-lg p-6 min-h-[700px]">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 min-h-[700px]">
           <div
-            className="max-w-none"
+            className="max-w-none text-gray-900 dark:text-gray-100"
             dangerouslySetInnerHTML={{ __html: content }}
           />
         </div>

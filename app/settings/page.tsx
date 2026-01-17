@@ -86,31 +86,31 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">설정</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">설정</h1>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Key className="w-5 h-5 text-gray-600" />
-          <h2 className="text-lg font-semibold text-gray-900">API 키</h2>
+          <Key className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">API 키</h2>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           이 API 키를 사용하여 외부에서 블로그 글을 등록할 수 있습니다.
         </p>
 
         {apiKey ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <code className="flex-1 px-4 py-3 bg-gray-100 rounded-lg font-mono text-sm text-gray-800 break-all">
+              <code className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg font-mono text-sm text-gray-800 dark:text-gray-200 break-all">
                 {apiKey}
               </code>
               <button
                 onClick={handleCopy}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 title="복사"
               >
                 {copied ? (
-                  <Check className="w-5 h-5 text-green-600" />
+                  <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
                 ) : (
                   <Copy className="w-5 h-5" />
                 )}
@@ -120,19 +120,19 @@ export default function SettingsPage() {
             <button
               onClick={handleRegenerate}
               disabled={regenerating}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
               {regenerating ? '재발급 중...' : 'API 키 재발급'}
             </button>
           </div>
         ) : (
-          <div className="text-gray-500">
+          <div className="text-gray-500 dark:text-gray-400">
             API 키가 없습니다. 재발급 버튼을 눌러 생성하세요.
             <button
               onClick={handleRegenerate}
               disabled={regenerating}
-              className="mt-4 flex items-center gap-2 px-4 py-2 text-sm text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+              className="mt-4 flex items-center gap-2 px-4 py-2 text-sm text-white bg-gray-900 dark:bg-gray-100 dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
               <Key className="w-4 h-4" />
               {regenerating ? '발급 중...' : 'API 키 발급'}
@@ -140,18 +140,18 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <h3 className="text-sm font-medium text-gray-900 mb-3">API 문서</h3>
+        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">API 문서</h3>
 
           {/* POST /api/publish */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">POST</span>
-              <code className="text-sm font-mono text-gray-800">/api/publish</code>
+              <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">POST</span>
+              <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/publish</code>
             </div>
-            <p className="text-sm text-gray-500 mb-2">블로그 글 등록 (외부 연동용)</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">블로그 글 등록 (외부 연동용)</p>
 
-            <div className="text-xs text-gray-600 mb-2">
+            <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
               <strong>Headers:</strong>
               <ul className="ml-4 mt-1 space-y-1">
                 <li><code>X-API-Key</code>: API 키 (필수)</li>
@@ -159,7 +159,7 @@ export default function SettingsPage() {
               </ul>
             </div>
 
-            <div className="text-xs text-gray-600 mb-2">
+            <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
               <strong>Body:</strong>
               <ul className="ml-4 mt-1 space-y-1">
                 <li><code>title</code>: 글 제목 (필수)</li>
@@ -171,7 +171,7 @@ export default function SettingsPage() {
               </ul>
             </div>
 
-            <pre className="px-4 py-3 bg-gray-900 rounded-lg text-xs text-gray-100 overflow-x-auto">
+            <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
 {`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/publish \\
   -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
@@ -188,17 +188,17 @@ export default function SettingsPage() {
           </div>
 
           {/* /api/products CRUD */}
-          <div className="mb-6 pt-4 border-t border-gray-100">
-            <h4 className="text-sm font-medium text-gray-800 mb-3">/api/products - 제품 관리 API</h4>
+          <div className="mb-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+            <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">/api/products - 제품 관리 API</h4>
 
             {/* GET */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">GET</span>
-                <code className="text-sm font-mono text-gray-800">/api/products</code>
+                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">GET</span>
+                <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/products</code>
               </div>
-              <p className="text-sm text-gray-500 mb-2">제품 목록/단일 조회</p>
-              <div className="text-xs text-gray-600 mb-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">제품 목록/단일 조회</p>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                 <strong>Query Parameters:</strong>
                 <ul className="ml-4 mt-1 space-y-1">
                   <li><code>id</code>: 단일 제품 조회</li>
@@ -210,7 +210,7 @@ export default function SettingsPage() {
                   <li><code>lastId</code>: 커서 기반 페이지네이션 (page 대신 사용)</li>
                 </ul>
               </div>
-              <pre className="px-4 py-3 bg-gray-900 rounded-lg text-xs text-gray-100 overflow-x-auto">
+              <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
 {`# 목록 조회 (페이지 기반)
 curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products?page=1&perPage=20"
@@ -228,11 +228,11 @@ curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
             {/* POST */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">POST</span>
-                <code className="text-sm font-mono text-gray-800">/api/products</code>
+                <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">POST</span>
+                <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/products</code>
               </div>
-              <p className="text-sm text-gray-500 mb-2">제품 추가</p>
-              <div className="text-xs text-gray-600 mb-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">제품 추가</p>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                 <strong>Body:</strong>
                 <ul className="ml-4 mt-1 space-y-1">
                   <li><code>name</code>: 제품명 (필수)</li>
@@ -243,7 +243,7 @@ curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
                   <li><code>brand</code>: 브랜드명</li>
                 </ul>
               </div>
-              <pre className="px-4 py-3 bg-gray-900 rounded-lg text-xs text-gray-100 overflow-x-auto">
+              <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
 {`curl -X POST -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
   "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products" \\
@@ -263,14 +263,14 @@ curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
             {/* PATCH */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded">PATCH</span>
-                <code className="text-sm font-mono text-gray-800">/api/products</code>
+                <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">PATCH</span>
+                <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/products</code>
               </div>
-              <p className="text-sm text-gray-500 mb-2">제품 수정</p>
-              <div className="text-xs text-gray-600 mb-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">제품 수정</p>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                 <strong>Body:</strong> <code>id</code> (필수) + 수정할 필드들
               </div>
-              <pre className="px-4 py-3 bg-gray-900 rounded-lg text-xs text-gray-100 overflow-x-auto">
+              <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
 {`curl -X PATCH -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
   "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products" \\
@@ -281,11 +281,11 @@ curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
             {/* DELETE */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">DELETE</span>
-                <code className="text-sm font-mono text-gray-800">/api/products?id=...</code>
+                <span className="px-2 py-0.5 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded">DELETE</span>
+                <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/products?id=...</code>
               </div>
-              <p className="text-sm text-gray-500 mb-2">제품 삭제</p>
-              <pre className="px-4 py-3 bg-gray-900 rounded-lg text-xs text-gray-100 overflow-x-auto">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">제품 삭제</p>
+              <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
 {`curl -X DELETE -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products?id=abc123"`}
               </pre>
@@ -294,10 +294,10 @@ curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
 
           {/* Response */}
           <div className="mb-6">
-            <div className="text-xs text-gray-600 mb-2">
+            <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
               <strong>Response 형식:</strong>
             </div>
-            <pre className="px-4 py-3 bg-gray-100 rounded-lg text-xs text-gray-800 overflow-x-auto">
+            <pre className="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs text-gray-800 dark:text-gray-200 overflow-x-auto">
 {`// 성공 (목록 - 페이지 기반)
 {
   "success": true,
@@ -325,9 +325,9 @@ curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
           </div>
 
           {/* Firestore 구조 */}
-          <div className="pt-4 border-t border-gray-100">
-            <h4 className="text-xs font-medium text-gray-700 mb-2">Firestore 컬렉션</h4>
-            <div className="text-xs text-gray-500 font-mono space-y-1">
+          <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+            <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Firestore 컬렉션</h4>
+            <div className="text-xs text-gray-500 dark:text-gray-400 font-mono space-y-1">
               <div>📁 blog_posts - 블로그 글</div>
               <div>📁 products - 할당된 제품 (userId_productId)</div>
               <div>📁 naver/_meta/products - 원본 제품</div>

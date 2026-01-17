@@ -86,7 +86,6 @@ export async function POST(request: NextRequest) {
       keywords: Array.isArray(body.keywords) ? body.keywords : [],
       products,
       status: body.status === 'published' ? 'published' : 'draft',
-      platform: body.platform || 'both',
       createdAt: now,
       updatedAt: now,
       metadata: {
