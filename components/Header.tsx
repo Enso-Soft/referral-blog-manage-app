@@ -14,7 +14,8 @@ import {
   LayoutDashboard,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  BookOpen
 } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { cn } from '@/lib/utils'
@@ -92,6 +93,7 @@ export function Header() {
         {/* Desktop Navigation */}
         {!loading && user && (
           <div className="hidden md:flex items-center gap-1">
+            <NavLink href="/" icon={BookOpen} active={pathname === '/'}>블로그</NavLink>
             <NavLink href="/products" icon={Package} active={pathname === '/products'}>제품</NavLink>
             {isAdmin && (
               <NavLink href="/admin" icon={LayoutDashboard} active={pathname === '/admin'}>관리자</NavLink>
@@ -178,7 +180,7 @@ export function Header() {
 
                   <div className="space-y-1">
                     <Link href="/" className="flex items-center justify-between px-4 py-3 rounded-xl bg-secondary/50">
-                      <span className="font-medium">홈</span>
+                      <span className="font-medium">블로그</span>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </Link>
                     <Link href="/products" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
