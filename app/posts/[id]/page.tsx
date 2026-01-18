@@ -26,6 +26,7 @@ import {
   ImageIcon,
   Send,
   FileEdit,
+  User,
 } from 'lucide-react'
 
 function PostDetail() {
@@ -187,79 +188,85 @@ function PostDetail() {
           목록으로
         </Link>
 
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span
-                className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                  post.status === 'published'
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                    : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                }`}
-              >
-                {post.status === 'published' ? '발행됨' : '초안'}
-              </span>
-              <button
-                onClick={handleStatusChange}
-                disabled={statusChanging}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full transition-colors ${
-                  post.status === 'draft'
-                    ? 'bg-green-600 text-white hover:bg-green-700'
-                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                } disabled:opacity-50`}
-              >
-                {statusChanging ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : post.status === 'draft' ? (
-                  <>
-                    <Send className="w-3 h-3" />
-                    발행하기
-                  </>
-                ) : (
-                  <>
-                    <FileEdit className="w-3 h-3" />
-                    초안으로
-                  </>
-                )}
-              </button>
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground break-words leading-tight mb-4">
+              {post.title}
+            </h1>
+
+            {/* Meta Info & Status Row */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-3 text-sm text-muted-foreground">
+              {/* Status Badge & Toggle */}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-full ${post.status === 'published'
+                    ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
+                    : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                    }`}
+                >
+                  {post.status === 'published' ? '발행됨' : '초안'}
+                </span>
+                <button
+                  onClick={handleStatusChange}
+                  disabled={statusChanging}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full transition-colors ${post.status === 'draft'
+                    ? 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                    } disabled:opacity-50`}
+                >
+                  {statusChanging ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : post.status === 'draft' ? (
+                    <>
+                      <Send className="w-3 h-3" />
+                      발행하기
+                    </>
+                  ) : (
+                    <>
+                      <FileEdit className="w-3 h-3" />
+                      초안으로
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="w-px h-3 bg-border hidden sm:block" />
+
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4" />
+                <span>{formatDate(post.createdAt)}</span>
+              </div>
+
+              {post.userEmail && (
+                <>
+                  <div className="w-px h-3 bg-border hidden sm:block" />
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-4 h-4" />
+                    <span>{post.userEmail.split('@')[0]}</span>
+                  </div>
+                </>
+              )}
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{post.title}</h1>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Actions: Grid on mobile, Flex on desktop */}
+          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
             <CopyButton content={post.content} />
             <Link
               href={`/posts/${post.id}/edit`}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium whitespace-nowrap bg-background border border-border hover:bg-secondary/50 rounded-xl transition-colors shadow-sm"
             >
               <Edit className="w-4 h-4" />
               수정
             </Link>
             <button
               onClick={handleDelete}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium whitespace-nowrap text-destructive bg-background border border-destructive/20 hover:bg-destructive/10 rounded-xl transition-colors shadow-sm"
             >
               <Trash2 className="w-4 h-4" />
               삭제
             </button>
           </div>
-        </div>
-
-        {/* Meta Info */}
-        <div className="flex items-center gap-6 mt-4 text-sm text-gray-500 dark:text-gray-400">
-          <div className="flex items-center gap-1">
-            <Clock className="w-4 h-4" />
-            <span>{formatDate(post.createdAt)}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <FileText className="w-4 h-4" />
-            <span>{post.metadata?.wordCount?.toLocaleString() || 0}자</span>
-          </div>
-          {post.userEmail && (
-            <div className="text-gray-400 dark:text-gray-500">
-              작성자: {post.userEmail}
-            </div>
-          )}
         </div>
 
         {/* Keywords */}
@@ -296,9 +303,8 @@ function PostDetail() {
               )}
             </button>
             <div
-              className={`grid transition-all duration-300 ease-in-out ${
-                productsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-              }`}
+              className={`grid transition-all duration-300 ease-in-out ${productsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                }`}
             >
               <div className="overflow-hidden">
                 <div className="px-4 pb-4 space-y-2">
@@ -343,9 +349,8 @@ function PostDetail() {
                 )}
               </button>
               <div
-                className={`grid transition-all duration-300 ease-in-out ${
-                  imagesOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                }`}
+                className={`grid transition-all duration-300 ease-in-out ${imagesOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                  }`}
               >
                 <div className="overflow-hidden">
                   <div className="px-4 pb-4 space-y-3">
