@@ -17,15 +17,20 @@ interface ProductData {
   [key: string]: unknown
 }
 
-// nameKeywords 생성 (검색용)
-function generateNameKeywords(name: string): string[] {
-  const words = name.toLowerCase().split(/\s+/)
+// nameKeywords 생성 (검색용) - N-gram 방식으로 모든 부분 문자열 생성
+function generateNameKeywords(name: string, brand?: string): string[] {
+  // 브랜드가 있으면 이름과 합쳐서 키워드 생성
+  const text = brand ? `${name} ${brand}` : name
+  const words = text.toLowerCase().split(/\s+/)
   const keywords: Set<string> = new Set()
 
   words.forEach(word => {
-    // 각 단어의 부분 문자열 추가 (1~전체 길이)
-    for (let i = 1; i <= word.length; i++) {
-      keywords.add(word.substring(0, i))
+    // 모든 부분 문자열 생성 (N-gram)
+    // "가습기" → ["가", "가습", "가습기", "습", "습기", "기"]
+    for (let start = 0; start < word.length; start++) {
+      for (let end = start + 1; end <= word.length; end++) {
+        keywords.add(word.substring(start, end))
+      }
     }
   })
 
@@ -72,9 +77,10 @@ export async function GET(request: NextRequest) {
         if (directSnap.exists) {
           const data = directSnap.data()
           if (data?.userId === auth.userId) {
+            const { nameKeywords, ...productData } = data
             return NextResponse.json({
               success: true,
-              product: { id: directSnap.id, ...data }
+              product: { id: directSnap.id, ...productData }
             })
           }
         }
@@ -92,9 +98,10 @@ export async function GET(request: NextRequest) {
         )
       }
 
+      const { nameKeywords, ...productData } = data
       return NextResponse.json({
         success: true,
-        product: { id: docSnap.id, ...data }
+        product: { id: docSnap.id, ...productData }
       })
     }
 
@@ -242,12 +249,15 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.count - a.count)
     }
 
+    // nameKeywords 필드 제거 (검색용으로만 사용, 응답에 불필요)
+    const cleanProducts = products.map(({ nameKeywords, ...rest }) => rest)
+
     return NextResponse.json({
       success: true,
-      products,
+      products: cleanProducts,
       // 커서 기반용 (첫 로드 시에도 hasMore 계산)
-      hasMore: lastId 
-        ? products.length === perPage 
+      hasMore: lastId
+        ? products.length === perPage
         : (pagination?.hasNextPage ?? products.length === perPage),
       // 페이지 기반용
       pagination,
@@ -314,7 +324,7 @@ export async function POST(request: NextRequest) {
         level3: body.category3 || '',
       },
       brand: body.brand || '',
-      nameKeywords: generateNameKeywords(body.name),
+      nameKeywords: generateNameKeywords(body.name, body.brand),
       assignedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -395,12 +405,19 @@ export async function PATCH(request: NextRequest) {
 
     if (body.name !== undefined) {
       updateData.name = body.name
-      updateData.nameKeywords = generateNameKeywords(body.name)
+    }
+    if (body.brand !== undefined) {
+      updateData.brand = body.brand
+    }
+    // name이나 brand가 변경되면 nameKeywords 재생성
+    if (body.name !== undefined || body.brand !== undefined) {
+      const newName = body.name ?? existingData?.name ?? ''
+      const newBrand = body.brand ?? existingData?.brand ?? ''
+      updateData.nameKeywords = generateNameKeywords(newName, newBrand)
     }
     if (body.price !== undefined) updateData.price = body.price
     if (body.images !== undefined) updateData.images = body.images
     if (body.affiliateLink !== undefined) updateData.affiliateLink = body.affiliateLink
-    if (body.brand !== undefined) updateData.brand = body.brand
     if (body.category1 !== undefined || body.category2 !== undefined || body.category3 !== undefined) {
       updateData.category = {
         level1: body.category1 ?? existingData?.category?.level1 ?? '',
