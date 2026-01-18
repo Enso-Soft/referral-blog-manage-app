@@ -141,198 +141,63 @@ export default function SettingsPage() {
         )}
 
         <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">API 문서</h3>
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">API 요약</h3>
 
-          {/* POST /api/publish */}
-          <div className="mb-6">
+          {/* API 문서 엔드포인트 안내 */}
+          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">POST</span>
-              <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/publish</code>
+              <code className="text-sm font-mono font-semibold text-blue-800 dark:text-blue-200">/api/docs</code>
+              <span className="text-sm text-blue-600 dark:text-blue-300">- API Documentation Endpoint</span>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">블로그 글 등록 (외부 연동용)</p>
-
-            <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-              <strong>Headers:</strong>
-              <ul className="ml-4 mt-1 space-y-1">
-                <li><code>X-API-Key</code>: API 키 (필수)</li>
-                <li><code>Content-Type</code>: application/json</li>
-              </ul>
+            <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+              상세 API 문서를 Markdown 형식으로 반환합니다. 각 엔드포인트의 파라미터, 요청/응답 예시, curl 명령어를 확인할 수 있습니다.
+            </p>
+            <div className="space-y-2 text-xs text-blue-600 dark:text-blue-400 mb-3">
+              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/docs</code> - 전체 API 문서</div>
+              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/docs?resource=publish</code> - Publish API만</div>
+              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/docs?resource=products</code> - Products API만</div>
             </div>
+            <pre className="px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
+{`curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
+  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/docs"`}
+            </pre>
+          </div>
 
-            <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-              <strong>Body:</strong>
-              <ul className="ml-4 mt-1 space-y-1">
-                <li><code>title</code>: 글 제목 (필수)</li>
-                <li><code>content</code>: HTML 내용 (필수)</li>
-                <li><code>keywords</code>: 키워드 배열</li>
-                <li><code>status</code>: &quot;draft&quot; | &quot;published&quot;</li>
-                <li><code>platform</code>: &quot;tistory&quot; | &quot;naver&quot; | &quot;both&quot;</li>
-                <li><code>products</code>: 제품 배열 [{`{name, affiliateLink, price?, brand?}`}]</li>
-              </ul>
-            </div>
-
-            <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
+          {/* API 요약 목록 */}
+          <div className="space-y-3">
+            {/* /api/publish */}
+            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/publish</code>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">블로그 글 CRUD (POST/GET/PATCH/DELETE)</p>
+              <pre className="mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
 {`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/publish \\
   -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "title": "글 제목",
-    "content": "<p>HTML 내용</p>",
-    "keywords": ["키워드1", "키워드2"],
-    "status": "draft",
-    "products": [
-      {"name": "제품명", "affiliateLink": "https://...", "price": 10000}
-    ]
-  }'`}
-            </pre>
+  -d '{"title": "제목", "content": "<p>내용</p>"}'`}
+              </pre>
+            </div>
+
+            {/* /api/products */}
+            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/products</code>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">제품 CRUD (POST/GET/PATCH/DELETE)</p>
+              <pre className="mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
+{`curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
+  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products?page=1&limit=20"`}
+              </pre>
+            </div>
+
           </div>
 
-          {/* /api/products CRUD */}
-          <div className="mb-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-            <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">/api/products - 제품 관리 API</h4>
-
-            {/* GET */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">GET</span>
-                <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/products</code>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">제품 목록/단일 조회</p>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                <strong>Query Parameters:</strong>
-                <ul className="ml-4 mt-1 space-y-1">
-                  <li><code>id</code>: 단일 제품 조회</li>
-                  <li><code>keyword</code> 또는 <code>search</code>: 검색어</li>
-                  <li><code>category</code>: 카테고리 필터</li>
-                  <li><code>minPrice</code>, <code>maxPrice</code>: 가격 범위 필터</li>
-                  <li><code>page</code>: 페이지 번호 (기본 1)</li>
-                  <li><code>perPage</code> 또는 <code>limit</code>: 페이지당 개수 (기본 20)</li>
-                  <li><code>lastId</code>: 커서 기반 페이지네이션 (page 대신 사용)</li>
-                </ul>
-              </div>
-              <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
-{`# 목록 조회 (페이지 기반)
-curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products?page=1&perPage=20"
-
-# 가격 범위 검색
-curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products?keyword=크림&minPrice=10000&maxPrice=50000"
-
-# 단일 조회
-curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products?id=abc123"`}
-              </pre>
-            </div>
-
-            {/* POST */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">POST</span>
-                <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/products</code>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">제품 추가</p>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                <strong>Body:</strong>
-                <ul className="ml-4 mt-1 space-y-1">
-                  <li><code>name</code>: 제품명 (필수)</li>
-                  <li><code>affiliateLink</code>: 제휴 링크 (필수)</li>
-                  <li><code>price</code>: 가격</li>
-                  <li><code>images</code>: 이미지 URL 배열</li>
-                  <li><code>category1</code>, <code>category2</code>, <code>category3</code>: 카테고리</li>
-                  <li><code>brand</code>: 브랜드명</li>
-                </ul>
-              </div>
-              <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
-{`curl -X POST -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  -H "Content-Type: application/json" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products" \\
-  -d '{
-    "name": "제품명",
-    "price": 10000,
-    "images": ["https://example.com/img.jpg"],
-    "affiliateLink": "https://link.coupang.com/...",
-    "category1": "화장품/미용",
-    "category2": "스킨케어",
-    "category3": "크림",
-    "brand": "브랜드명"
-  }'`}
-              </pre>
-            </div>
-
-            {/* PATCH */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">PATCH</span>
-                <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/products</code>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">제품 수정</p>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                <strong>Body:</strong> <code>id</code> (필수) + 수정할 필드들
-              </div>
-              <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
-{`curl -X PATCH -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  -H "Content-Type: application/json" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products" \\
-  -d '{"id": "abc123", "price": 15000, "name": "수정된 이름"}'`}
-              </pre>
-            </div>
-
-            {/* DELETE */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded">DELETE</span>
-                <code className="text-sm font-mono text-gray-800 dark:text-gray-200">/api/products?id=...</code>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">제품 삭제</p>
-              <pre className="px-4 py-3 bg-gray-900 dark:bg-gray-950 rounded-lg text-xs text-gray-100 overflow-x-auto">
-{`curl -X DELETE -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products?id=abc123"`}
-              </pre>
-            </div>
-          </div>
-
-          {/* Response */}
-          <div className="mb-6">
-            <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-              <strong>Response 형식:</strong>
-            </div>
-            <pre className="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs text-gray-800 dark:text-gray-200 overflow-x-auto">
-{`// 성공 (목록 - 페이지 기반)
-{
-  "success": true,
-  "products": [...],
-  "pagination": {
-    "currentPage": 1,
-    "totalPages": 27,
-    "perPage": 20,
-    "totalCount": 522,
-    "hasNextPage": true,
-    "hasPrevPage": false
-  },
-  "total": 522
-}
-
-// 성공 (단일/추가/수정)
-{"success": true, "product": {...}, "message": "..."}
-
-// 성공 (삭제)
-{"success": true, "message": "제품이 삭제되었습니다"}
-
-// 실패
-{"success": false, "error": "에러 메시지"}`}
-            </pre>
-          </div>
-
-          {/* Firestore 구조 */}
-          <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
-            <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Firestore 컬렉션</h4>
-            <div className="text-xs text-gray-500 dark:text-gray-400 font-mono space-y-1">
-              <div>📁 blog_posts - 블로그 글</div>
-              <div>📁 products - 할당된 제품 (userId_productId)</div>
-              <div>📁 naver/_meta/products - 원본 제품</div>
-              <div>📁 users - 사용자</div>
-            </div>
+          {/* 인증 안내 */}
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              모든 API는 <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">X-API-Key</code> 헤더로 인증합니다.
+            </p>
           </div>
         </div>
       </div>

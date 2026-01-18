@@ -5,7 +5,7 @@ import { getAuthFromRequest } from '@/lib/auth-admin'
 // PATCH: 콘텐츠 상태 수정
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const auth = await getAuthFromRequest(request)
@@ -16,7 +16,7 @@ export async function PATCH(
       )
     }
 
-    const { id } = await params
+    const { id } = params
     const body = await request.json()
     const { status } = body
 
@@ -62,7 +62,7 @@ export async function PATCH(
 // DELETE: 콘텐츠 삭제
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const auth = await getAuthFromRequest(request)
@@ -73,7 +73,7 @@ export async function DELETE(
       )
     }
 
-    const { id } = await params
+    const { id } = params
     const db = getDb()
     const postRef = db.collection('blog_posts').doc(id)
     const postDoc = await postRef.get()

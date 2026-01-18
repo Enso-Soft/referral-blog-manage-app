@@ -1,12 +1,14 @@
 'use client'
 
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { PostViewer } from '@/components/PostViewer'
 import { CopyButton } from '@/components/CopyButton'
 import { AuthGuard } from '@/components/AuthGuard'
+import { Snackbar } from '@/components/Snackbar'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
+import { usePost } from '@/hooks/usePost'
 import {
   ArrowLeft,
   Edit,
@@ -26,39 +28,36 @@ import {
   FileEdit,
 } from 'lucide-react'
 
-interface Product {
-  name: string
-  affiliateLink: string
-}
-
-interface Post {
-  id: string
-  title: string
-  content: string
-  keywords: string[]
-  products?: Product[]
-  status: 'draft' | 'published'
-  createdAt: any
-  updatedAt: any
-  userId?: string
-  userEmail?: string
-  metadata?: {
-    originalPath?: string
-    wordCount?: number
-  }
-}
-
 function PostDetail() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const postId = params.id as string
-  const [post, setPost] = useState<Post | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { post, loading, error } = usePost(postId)
   const [productsOpen, setProductsOpen] = useState(false)
   const [imagesOpen, setImagesOpen] = useState(false)
   const [statusChanging, setStatusChanging] = useState(false)
+  const [snackbarMessage, setSnackbarMessage] = useState('')
+  const [snackbarVisible, setSnackbarVisible] = useState(false)
   const { authFetch } = useAuthFetch()
+
+  // 저장 완료 후 스낵바 표시
+  useEffect(() => {
+    if (searchParams.get('saved') === 'true') {
+      setSnackbarMessage('저장 완료')
+      setSnackbarVisible(true)
+      setTimeout(() => setSnackbarVisible(false), 1500)
+      // URL 정리 (쿼리 파라미터 제거)
+      window.history.replaceState({}, '', `/posts/${postId}`)
+    }
+  }, [searchParams, postId])
+
+  const handleKeywordCopy = async (keyword: string) => {
+    await navigator.clipboard.writeText(keyword)
+    setSnackbarMessage(`"${keyword}" 복사됨`)
+    setSnackbarVisible(true)
+    setTimeout(() => setSnackbarVisible(false), 1500)
+  }
 
   // content에서 이미지 URL 추출
   const extractImages = (content: string): string[] => {
@@ -77,32 +76,21 @@ function PostDetail() {
     window.location.href = downloadUrl
   }
 
-  useEffect(() => {
-    async function fetchPost() {
-      try {
-        const res = await authFetch(`/api/posts/${postId}`)
-        const data = await res.json()
-
-        if (data.success) {
-          setPost(data.post)
-        } else {
-          setError(data.error || '포스트를 불러올 수 없습니다')
-        }
-      } catch (err) {
-        setError('포스트를 불러오는 중 오류가 발생했습니다')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchPost()
-  }, [postId, authFetch])
-
   const formatDate = (timestamp: any) => {
     if (!timestamp) return ''
-    const date = timestamp._seconds
-      ? new Date(timestamp._seconds * 1000)
-      : new Date(timestamp)
+    // Firestore client SDK: toDate() 메서드 있음
+    // API 응답: _seconds 필드 있음
+    // 일반 Date 객체 또는 ISO string
+    let date: Date
+    if (timestamp.toDate) {
+      date = timestamp.toDate()
+    } else if (timestamp._seconds) {
+      date = new Date(timestamp._seconds * 1000)
+    } else if (timestamp.seconds) {
+      date = new Date(timestamp.seconds * 1000)
+    } else {
+      date = new Date(timestamp)
+    }
     return new Intl.DateTimeFormat('ko-KR', {
       year: 'numeric',
       month: 'long',
@@ -130,11 +118,10 @@ function PostDetail() {
       })
       const data = await res.json()
 
-      if (data.success) {
-        setPost({ ...post, status: newStatus })
-      } else {
+      if (!data.success) {
         alert('상태 변경에 실패했습니다: ' + data.error)
       }
+      // 성공 시 Firestore 실시간 구독으로 자동 반영됨
     } catch (err) {
       alert('상태 변경에 실패했습니다.')
       console.error(err)
@@ -280,12 +267,13 @@ function PostDetail() {
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <Tag className="w-4 h-4 text-gray-400 dark:text-gray-500" />
             {post.keywords.map((keyword, i) => (
-              <span
+              <button
                 key={i}
-                className="text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded"
+                onClick={() => handleKeywordCopy(keyword)}
+                className="text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
               >
                 #{keyword}
-              </span>
+              </button>
             ))}
           </div>
         )}
@@ -394,6 +382,9 @@ function PostDetail() {
 
       {/* Content */}
       <PostViewer content={post.content} />
+
+      {/* Snackbar */}
+      <Snackbar message={snackbarMessage} visible={snackbarVisible} />
     </div>
   )
 }

@@ -1,17 +1,20 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PostEditor } from '@/components/PostEditor'
+import { ProductEditor } from '@/components/ProductEditor'
 import { AuthGuard } from '@/components/AuthGuard'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { Product } from '@/lib/firestore'
 
 interface Post {
   id: string
   title: string
   content: string
+  products?: Product[]
   metadata?: {
     wordCount?: number
     originalPath?: string
@@ -26,8 +29,10 @@ function countWords(html: string): number {
 
 function PostEditContent() {
   const params = useParams()
+  const router = useRouter()
   const postId = params.id as string
   const [post, setPost] = useState<Post | null>(null)
+  const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -42,6 +47,7 @@ function PostEditContent() {
 
         if (data.success) {
           setPost(data.post)
+          setProducts(data.post.products || [])
         } else {
           setError(data.error || '포스트를 불러올 수 없습니다')
         }
@@ -65,6 +71,7 @@ function PostEditContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content,
+          products,
           metadata: {
             ...post.metadata,
             wordCount: countWords(content),
@@ -75,8 +82,7 @@ function PostEditContent() {
       const data = await res.json()
 
       if (data.success) {
-        setSaveStatus('saved')
-        setTimeout(() => setSaveStatus('idle'), 2000)
+        router.push(`/posts/${post.id}?saved=true`)
       } else {
         throw new Error(data.error)
       }
@@ -150,6 +156,11 @@ function PostEditContent() {
 
       {/* Editor */}
       <PostEditor initialContent={post.content} onSave={handleSave} />
+
+      {/* 제품 목록 에디터 */}
+      <div className="mt-6">
+        <ProductEditor products={products} onChange={setProducts} />
+      </div>
     </div>
   )
 }

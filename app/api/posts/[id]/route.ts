@@ -111,6 +111,10 @@ export async function PATCH(
       updateData.metadata = body.metadata
     }
 
+    if (body.products !== undefined) {
+      updateData.products = body.products
+    }
+
     await docRef.update(updateData)
 
     return NextResponse.json({ success: true })
