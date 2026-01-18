@@ -1,16 +1,21 @@
-'use client'
-
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithGoogle, getIdToken } from '@/lib/auth'
-import { Loader2 } from 'lucide-react'
+import { Loader2, AlertTriangle } from 'lucide-react'
+import { useInAppBrowser } from '@/hooks/useInAppBrowser'
 
 export default function LoginPage() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const isInAppBrowser = useInAppBrowser()
 
   const handleGoogleLogin = async () => {
+    if (isInAppBrowser) {
+      setError('보안상 인앱 브라우저에서는 Google 로그인을 지원하지 않습니다. 외부 브라우저(Chrome, Safari 등)에서 열어주세요.')
+      return
+    }
+
     setError(null)
     setLoading(true)
 
@@ -55,6 +60,20 @@ export default function LoginPage() {
             Google 계정으로 로그인하세요
           </p>
 
+          {isInAppBrowser && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-lg mb-6 text-sm flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold mb-1">인앱 브라우저 감지됨</p>
+                <p>
+                  Google 보안 정책으로 인해 현재 브라우저에서는 로그인이 제한될 수 있습니다.
+                  <br />
+                  화면의 메뉴 버튼(통상 우측 하단/상단 점 3개)을 눌러 <strong>'다른 브라우저로 열기'</strong>를 선택해주세요.
+                </p>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="text-red-500 dark:text-red-400 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg mb-4">
               {error}
@@ -64,8 +83,9 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={handleGoogleLogin}
-            disabled={loading}
-            className="w-full py-3 px-4 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            disabled={loading || isInAppBrowser}
+            className={`w-full py-3 px-4 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${isInAppBrowser ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
           >
             {loading ? (
               <>
