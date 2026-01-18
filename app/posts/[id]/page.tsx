@@ -190,53 +190,61 @@ function PostDetail() {
 
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-3">
-              <span
-                className={`px-2.5 py-1 text-xs font-semibold rounded-full ${post.status === 'published'
-                  ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
-                  : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
-                  }`}
-              >
-                {post.status === 'published' ? '발행됨' : '초안'}
-              </span>
-              <button
-                onClick={handleStatusChange}
-                disabled={statusChanging}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full transition-colors ${post.status === 'draft'
-                  ? 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
-                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                  } disabled:opacity-50`}
-              >
-                {statusChanging ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : post.status === 'draft' ? (
-                  <>
-                    <Send className="w-3 h-3" />
-                    발행하기
-                  </>
-                ) : (
-                  <>
-                    <FileEdit className="w-3 h-3" />
-                    초안으로
-                  </>
-                )}
-              </button>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground break-words leading-tight">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground break-words leading-tight mb-4">
               {post.title}
             </h1>
 
-            {/* Mobile-optimized Meta Info moved here for better flow */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-sm text-muted-foreground">
+            {/* Meta Info & Status Row */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-3 text-sm text-muted-foreground">
+              {/* Status Badge & Toggle */}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-full ${post.status === 'published'
+                    ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400'
+                    : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                    }`}
+                >
+                  {post.status === 'published' ? '발행됨' : '초안'}
+                </span>
+                <button
+                  onClick={handleStatusChange}
+                  disabled={statusChanging}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full transition-colors ${post.status === 'draft'
+                    ? 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                    } disabled:opacity-50`}
+                >
+                  {statusChanging ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : post.status === 'draft' ? (
+                    <>
+                      <Send className="w-3 h-3" />
+                      발행하기
+                    </>
+                  ) : (
+                    <>
+                      <FileEdit className="w-3 h-3" />
+                      초안으로
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="w-px h-3 bg-border hidden sm:block" />
+
               <div className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4" />
                 <span>{formatDate(post.createdAt)}</span>
               </div>
+
               {post.userEmail && (
-                <div className="flex items-center gap-1.5">
-                  <User className="w-4 h-4" />
-                  <span>{post.userEmail.split('@')[0]}</span>
-                </div>
+                <>
+                  <div className="w-px h-3 bg-border hidden sm:block" />
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-4 h-4" />
+                    <span>{post.userEmail.split('@')[0]}</span>
+                  </div>
+                </>
               )}
             </div>
           </div>
