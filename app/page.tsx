@@ -7,9 +7,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 const LAYOUT_ANIMATION_THRESHOLD = 12 // 이 개수 이상이면 layout 애니메이션 비활성화
 import { PostCard } from '@/components/PostCard'
 import { AuthGuard } from '@/components/AuthGuard'
+import { AIWriterModal } from '@/components/AIWriterModal'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { usePosts } from '@/hooks/usePosts'
-import { Loader2, AlertCircle, FileX } from 'lucide-react'
+import { Loader2, AlertCircle, FileX, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -18,6 +19,7 @@ type StatusFilter = 'all' | 'draft' | 'published'
 function PostList() {
   const { posts, loading, error, filter, setFilter, typeFilter, setTypeFilter, scrollPosition, setScrollPosition } = usePosts()
   const { authFetch } = useAuthFetch()
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false)
 
   // Scroll restoration
   useLayoutEffect(() => {
@@ -68,6 +70,16 @@ function PostList() {
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">블로그 글 목록</h1>
           <p className="text-muted-foreground mt-2 text-lg">블로그 콘텐츠를 관리하고 편집합니다.</p>
         </div>
+        <button
+          onClick={() => setIsAIModalOpen(true)}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white
+                     bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500
+                     hover:from-violet-600 hover:via-purple-600 hover:to-fuchsia-600
+                     shadow-lg hover:shadow-xl transition-all hover:scale-105"
+        >
+          <Sparkles className="w-4 h-4" />
+          AI로 작성
+        </button>
       </div>
 
       {/* Filters Container */}
@@ -164,6 +176,12 @@ function PostList() {
           </div>
         )}
       </div>
+
+      {/* AI Writer Modal */}
+      <AIWriterModal
+        isOpen={isAIModalOpen}
+        onClose={() => setIsAIModalOpen(false)}
+      />
     </div>
   )
 }
