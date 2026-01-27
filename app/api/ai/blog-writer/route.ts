@@ -118,23 +118,22 @@ async function callAIApi(
       }),
     })
 
+    // 실패 응답: statusCode !== 200, body: {"detail": "에러 메시지"}
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || errorData.error || `AI API 오류: ${response.status}`)
+      throw new Error(errorData.detail || `AI API 오류: ${response.status}`)
     }
 
+    // 성공 응답: statusCode === 200, body: {"success": true}
+    // AI에게 요청 전달 성공 = pending 상태 유지
+    // 실제 글 작성 완료는 AI 서버가 직접 Firestore를 업데이트함
     const result = await response.json()
 
-    // 성공 시 Firestore 업데이트
-    if (result.success && result.postId) {
-      await requestRef.update({
-        status: 'success',
-        resultPostId: result.postId,
-        completedAt: Timestamp.now(),
-      })
-    } else {
-      throw new Error(result.error || 'AI API 응답이 올바르지 않습니다')
+    if (!result.success) {
+      throw new Error(result.detail || 'AI API 응답이 올바르지 않습니다')
     }
+
+    // 요청 전달 성공 - pending 상태 유지 (Firestore 업데이트 불필요)
   } catch (error) {
     // 실패 시 Firestore 업데이트
     await requestRef.update({
@@ -142,6 +141,54 @@ async function callAIApi(
       errorMessage: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다',
       completedAt: Timestamp.now(),
     })
+  }
+}
+
+// DELETE: AI 요청 삭제
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await getAuthFromRequest(request)
+    requireAuth(auth)
+
+    const { searchParams } = new URL(request.url)
+    const requestId = searchParams.get('id')
+
+    if (!requestId) {
+      return NextResponse.json(
+        { success: false, error: '요청 ID가 필요합니다' },
+        { status: 400 }
+      )
+    }
+
+    const db = getDb()
+    const requestRef = db.collection('ai_write_requests').doc(requestId)
+    const requestDoc = await requestRef.get()
+
+    if (!requestDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: '요청을 찾을 수 없습니다' },
+        { status: 404 }
+      )
+    }
+
+    // 본인 요청인지 확인
+    const requestData = requestDoc.data()
+    if (requestData?.userId !== auth.userId) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      )
+    }
+
+    // 영구 삭제
+    await requestRef.delete()
+
+    return NextResponse.json({
+      success: true,
+      message: '요청이 삭제되었습니다',
+    })
+  } catch (error) {
+    return handleApiError(error)
   }
 }
 

@@ -29,12 +29,13 @@ import {
   type AIWriteOptions,
   type AIWriteRequest,
 } from '@/lib/schemas/aiRequest'
-import { ProductSearchSheet } from './ProductSearchSheet'
+import { ProductCombobox } from './ProductCombobox'
 import Link from 'next/link'
 
 interface AIWriterModalProps {
   isOpen: boolean
   onClose: () => void
+  retryData?: AIWriteRequest | null
 }
 
 interface SelectedProduct {
@@ -46,22 +47,21 @@ interface SelectedProduct {
 const MAX_IMAGES = 10
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
 
-export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
+export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps) {
   // Form state
   const [prompt, setPrompt] = useState('')
   const [images, setImages] = useState<{ file: File; preview: string }[]>([])
   const [platform, setPlatform] = useState<'tistory' | 'naver' | 'both'>('tistory')
-  const [toneType, setToneType] = useState<string>('friendly')
+  const [toneType, setToneType] = useState<string>('auto')
   const [customTone, setCustomTone] = useState('')
-  const [length, setLength] = useState<'short' | 'medium' | 'long'>('medium')
+  const [length, setLength] = useState<'auto' | 'short' | 'medium' | 'long'>('auto')
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([])
 
   // UI state
   const [isOptionsExpanded, setIsOptionsExpanded] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [isProductSheetOpen, setIsProductSheetOpen] = useState(false)
-
+  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
@@ -79,10 +79,43 @@ export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // retryData가 변경되면 폼에 복원
+  useEffect(() => {
+    if (retryData && isOpen) {
+      setPrompt(retryData.prompt)
+      setPlatform(retryData.options.platform)
+      if (retryData.options.tone) {
+        const found = TONE_OPTIONS.find(t => t.label === retryData.options.tone)
+        if (found) {
+          setToneType(found.value)
+        } else {
+          setToneType('custom')
+          setCustomTone(retryData.options.tone)
+        }
+      }
+      if (retryData.options.length) {
+        setLength(retryData.options.length)
+      }
+      // 스크롤을 맨 위로
+      setTimeout(() => {
+        const modal = document.getElementById('ai-writer-modal-content')
+        modal?.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
+    }
+  }, [retryData, isOpen])
+
   // 알림음 초기화
   useEffect(() => {
-    audioRef.current = new Audio('/sounds/notification.mp3')
-    audioRef.current.volume = 0.5
+    const audio = new Audio('/sounds/notification.mp3')
+    audio.volume = 0.5
+    // 파일 존재 확인
+    audio.addEventListener('canplaythrough', () => {
+      audioRef.current = audio
+    })
+    audio.addEventListener('error', () => {
+      // 알림음 파일이 없으면 무시
+      audioRef.current = null
+    })
   }, [])
 
   // 새로 완료된 요청 시 알림음
@@ -98,13 +131,13 @@ export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
   // ESC 키 핸들링
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen && !isProductSheetOpen) {
+      if (e.key === 'Escape' && isOpen) {
         onClose()
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose, isProductSheetOpen])
+  }, [isOpen, onClose])
 
   // Body scroll 막기
   useEffect(() => {
@@ -155,15 +188,13 @@ export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
   }, [])
 
   // 제품 선택 핸들러
-  const handleProductSelect = useCallback((product: { name: string; affiliateLink: string }) => {
-    const id = `product-${Date.now()}`
+  const handleProductSelect = useCallback((product: { id: string; name: string; affiliateLink: string }) => {
     setSelectedProducts(prev => {
       if (prev.some(p => p.affiliateLink === product.affiliateLink)) {
         return prev
       }
-      return [...prev, { id, ...product }]
+      return [...prev, product]
     })
-    setIsProductSheetOpen(false)
   }, [])
 
   // 제품 제거
@@ -208,17 +239,34 @@ export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
         throw new Error(data.error || data.message || '요청에 실패했습니다')
       }
 
-      // 성공 시 폼 초기화
+      // 성공 시 폼 초기화 후 모달 닫기
       setPrompt('')
       setImages([])
       setSelectedProducts([])
       setToneType('friendly')
       setCustomTone('')
       setLength('medium')
+      onClose()
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : '요청 중 오류가 발생했습니다')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  // 삭제
+  const handleDelete = async (requestId: string) => {
+    try {
+      const res = await authFetch(`/api/ai/blog-writer?id=${requestId}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (!data.success) {
+        throw new Error(data.error || '삭제에 실패했습니다')
+      }
+    } catch (err) {
+      console.error('Failed to delete request:', err)
+      throw err
     }
   }
 
@@ -503,31 +551,12 @@ export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
                         {/* 제품 연동 */}
                         <div className="space-y-2">
                           <label className="text-sm text-gray-600 dark:text-gray-400">제품 연동</label>
-                          <div className="flex flex-wrap gap-2">
-                            {selectedProducts.map((product) => (
-                              <span
-                                key={product.id}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-violet-100 dark:bg-violet-900/30
-                                           text-violet-700 dark:text-violet-300 text-sm rounded-full"
-                              >
-                                {product.name.length > 20 ? product.name.slice(0, 20) + '...' : product.name}
-                                <button
-                                  onClick={() => removeProduct(product.id)}
-                                  className="ml-1 hover:text-violet-900 dark:hover:text-violet-100"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                            <button
-                              onClick={() => setIsProductSheetOpen(true)}
-                              className="px-3 py-1 border border-dashed border-gray-300 dark:border-gray-600
-                                         text-gray-500 dark:text-gray-400 text-sm rounded-full
-                                         hover:border-violet-400 hover:text-violet-500 transition-colors"
-                            >
-                              + 제품 추가
-                            </button>
-                          </div>
+                          <ProductCombobox
+                            selectedProducts={selectedProducts}
+                            onSelect={handleProductSelect}
+                            onRemove={removeProduct}
+                            maxSelections={10}
+                          />
                         </div>
                       </motion.div>
                     )}
@@ -583,6 +612,7 @@ export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
                             key={req.id}
                             request={req}
                             onRetry={() => handleRetry(req)}
+                            onDelete={() => handleDelete(req.id)}
                           />
                         ))}
                       </div>
@@ -617,13 +647,6 @@ export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
               </div>
             </div>
           </motion.div>
-
-          {/* Product Search Sheet */}
-          <ProductSearchSheet
-            isOpen={isProductSheetOpen}
-            onClose={() => setIsProductSheetOpen(false)}
-            onSelect={handleProductSelect}
-          />
         </>
       )}
     </AnimatePresence>
@@ -634,10 +657,22 @@ export function AIWriterModal({ isOpen, onClose }: AIWriterModalProps) {
 function RequestHistoryItem({
   request,
   onRetry,
+  onDelete,
 }: {
   request: AIWriteRequest
   onRetry: () => void
+  onDelete: () => Promise<void>
 }) {
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    try {
+      await onDelete()
+    } finally {
+      setIsDeleting(false)
+    }
+  }
   const statusConfig = {
     pending: {
       icon: <Loader2 className="w-4 h-4 animate-spin" />,
@@ -688,14 +723,30 @@ function RequestHistoryItem({
         </Link>
       )}
       {request.status === 'failed' && (
-        <button
-          onClick={onRetry}
-          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400
-                     hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
-        >
-          <RotateCcw className="w-3 h-3" />
-          재시도
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onRetry}
+            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400
+                       hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" />
+            재시도
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-500 dark:text-red-400
+                       hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md transition-colors
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isDeleting ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Trash2 className="w-3 h-3" />
+            )}
+            삭제
+          </button>
+        </div>
       )}
     </div>
   )
