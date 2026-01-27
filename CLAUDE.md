@@ -86,13 +86,22 @@ interface BlogPost {
 
 ## Environment Variables
 
-Required `NEXT_PUBLIC_*` Firebase config variables:
-- `NEXT_PUBLIC_FIREBASE_API_KEY`
-- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
-- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
-- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
-- `NEXT_PUBLIC_FIREBASE_APP_ID`
+환경변수는 `.env.local` 파일 참고.
+
+### Amplify 배포 시 환경변수 주의사항
+
+**중요**: 새로운 서버 사이드 환경변수를 추가할 때는 반드시 두 곳에 설정해야 함:
+
+1. **Amplify Console** → Environment variables에 추가
+2. **`amplify.yml`** 파일의 build commands에 추가:
+```yaml
+build:
+  commands:
+    - echo "NEW_ENV_VAR=$NEW_ENV_VAR" >> .env.production
+    - npm run build
+```
+
+`amplify.yml`에 추가하지 않으면 빌드 시 `.env.production`에 포함되지 않아 API Routes에서 환경변수를 읽을 수 없음.
 
 ## Path Aliases
 

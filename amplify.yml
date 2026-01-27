@@ -13,6 +13,7 @@ frontend:
         - echo "S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY" >> .env.production
         - echo "S3_REGION=$S3_REGION" >> .env.production
         - echo "S3_BUCKET=$S3_BUCKET" >> .env.production
+        - echo "AI_API_KEY=$AI_API_KEY" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
