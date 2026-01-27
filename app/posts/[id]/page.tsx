@@ -7,6 +7,7 @@ import { PostViewer } from '@/components/PostViewer'
 import { CopyButton } from '@/components/CopyButton'
 import { AuthGuard } from '@/components/AuthGuard'
 import { Snackbar } from '@/components/Snackbar'
+import { AIChatModal, AIChatFloatingButton } from '@/components/AIChatModal'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { usePost } from '@/hooks/usePost'
 import { formatDate } from '@/lib/utils'
@@ -47,6 +48,7 @@ function PostDetail() {
   const [publishedUrl, setPublishedUrl] = useState('')
   const [publishedUrlError, setPublishedUrlError] = useState('')
   const [publishedUrlSaving, setPublishedUrlSaving] = useState(false)
+  const [isAIChatOpen, setIsAIChatOpen] = useState(false)
   const { authFetch } = useAuthFetch()
 
   // 저장 완료 후 스낵바 표시
@@ -546,6 +548,14 @@ function PostDetail() {
 
       {/* Content */}
       <PostViewer content={post.content} />
+
+      {/* AI Chat */}
+      <AIChatFloatingButton onClick={() => setIsAIChatOpen(true)} />
+      <AIChatModal
+        postId={postId}
+        isOpen={isAIChatOpen}
+        onClose={() => setIsAIChatOpen(false)}
+      />
 
       {/* Snackbar */}
       <Snackbar message={snackbarMessage} visible={snackbarVisible} />

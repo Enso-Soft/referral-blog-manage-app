@@ -54,10 +54,21 @@ npm run start    # Start production server
 - `/posts/[id]` - Post detail view with HTML copy button
 - `/posts/[id]/edit` - Edit post with split-view editor
 
-### Firestore Collection
-Collection: `blog_posts`
+### Firestore Collections
+
+**주요 컬렉션:**
+- `blog_posts` - 블로그 글
+- `products` - 제품 정보
+- `ai_write_requests` - AI 글 작성 요청
+
+**스키마 상세 문서:**
+- `lib/schemas/aiRequest.ts` - AI 관련 컬렉션 스키마 (서버 개발자용 주석 포함)
+- `lib/firestore.ts` - BlogPost 인터페이스
+
 ```typescript
+// blog_posts 컬렉션 (간략)
 interface BlogPost {
+  userId: string
   title: string
   content: string      // HTML content
   excerpt: string
@@ -67,9 +78,11 @@ interface BlogPost {
   platform: 'tistory' | 'naver' | 'both'
   createdAt: Timestamp
   updatedAt: Timestamp
-  metadata: { originalPath?: string; wordCount: number }
+  metadata: { originalPath?: string; wordCount: number; aiGenerated?: boolean }
 }
 ```
+
+**인덱스 설정:** `firestore.indexes.json` 참고
 
 ## Environment Variables
 
