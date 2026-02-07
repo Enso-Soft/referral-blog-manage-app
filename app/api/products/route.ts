@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       const searchTerm = search.toLowerCase().trim()
       const searchLimit = 200 // 검색 결과 후 필터링을 위해 넉넉하게
 
-      const [keywordSnapshot, brandSnapshot] = await Promise.all([
+      const [keywordSnapshot, brandSnapshot, affiliateLinkSnapshot, finalUrlSnapshot] = await Promise.all([
         productsRef
           .where('userId', '==', auth.userId)
           .where('nameKeywords', 'array-contains', searchTerm)
@@ -136,19 +136,32 @@ export async function GET(request: NextRequest) {
           .where('brand', '==', search.trim())
           .limit(searchLimit)
           .get(),
+        productsRef
+          .where('userId', '==', auth.userId)
+          .where('affiliateLink', '==', search.trim())
+          .limit(searchLimit)
+          .get(),
+        productsRef
+          .where('userId', '==', auth.userId)
+          .where('finalUrl', '==', search.trim())
+          .limit(searchLimit)
+          .get(),
       ])
 
       const productMap = new Map<string, { id: string; [key: string]: unknown }>()
 
-      keywordSnapshot.docs.forEach((doc) => {
-        productMap.set(doc.id, { id: doc.id, ...doc.data() })
-      })
+      const addToMap = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) => {
+        docs.forEach((doc) => {
+          if (!productMap.has(doc.id)) {
+            productMap.set(doc.id, { id: doc.id, ...doc.data() })
+          }
+        })
+      }
 
-      brandSnapshot.docs.forEach((doc) => {
-        if (!productMap.has(doc.id)) {
-          productMap.set(doc.id, { id: doc.id, ...doc.data() })
-        }
-      })
+      addToMap(keywordSnapshot.docs)
+      addToMap(brandSnapshot.docs)
+      addToMap(affiliateLinkSnapshot.docs)
+      addToMap(finalUrlSnapshot.docs)
 
       let allProducts = Array.from(productMap.values())
 
