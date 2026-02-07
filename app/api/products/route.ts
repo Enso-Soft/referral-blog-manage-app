@@ -125,14 +125,15 @@ export async function GET(request: NextRequest) {
       const searchTerm = search.toLowerCase().trim()
       const searchLimit = 200 // 검색 결과 후 필터링을 위해 넉넉하게
 
-      // 검색어를 단어로 분리 (array-contains는 첫 번째 단어로, 나머지는 클라이언트 필터링)
+      // 검색어를 단어로 분리 (array-contains는 가장 긴 단어로, 나머지는 클라이언트 필터링)
       const searchWords = searchTerm.split(/\s+/).filter(w => w.length > 0)
-      const firstWord = searchWords[0] || searchTerm
+      // 가장 긴 단어를 쿼리 키워드로 사용 (N-gram 특성상 길수록 고유하여 결과가 적음)
+      const queryWord = searchWords.reduce((a, b) => a.length >= b.length ? a : b, searchWords[0])
 
       const [keywordSnapshot, brandSnapshot, affiliateLinkSnapshot, finalUrlSnapshot] = await Promise.all([
         productsRef
           .where('userId', '==', auth.userId)
-          .where('nameKeywords', 'array-contains', firstWord)
+          .where('nameKeywords', 'array-contains', queryWord)
           .limit(searchLimit)
           .get(),
         productsRef
@@ -169,16 +170,18 @@ export async function GET(request: NextRequest) {
 
       // 여러 단어 검색 시 나머지 단어로 클라이언트 필터링
       if (searchWords.length > 1) {
-        const remainingWords = searchWords.slice(1)
-        for (const [id, product] of productMap) {
+        const remainingWords = searchWords.filter(w => w !== queryWord)
+        const idsToDelete: string[] = []
+        productMap.forEach((product, id) => {
           const name = ((product.name as string) || '').toLowerCase()
           const brand = ((product.brand as string) || '').toLowerCase()
           const text = `${name} ${brand}`
           const allMatch = remainingWords.every(word => text.includes(word))
           if (!allMatch) {
-            productMap.delete(id)
+            idsToDelete.push(id)
           }
-        }
+        })
+        idsToDelete.forEach(id => productMap.delete(id))
       }
 
       let allProducts = Array.from(productMap.values())
