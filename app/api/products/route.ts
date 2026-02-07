@@ -125,10 +125,14 @@ export async function GET(request: NextRequest) {
       const searchTerm = search.toLowerCase().trim()
       const searchLimit = 200 // 검색 결과 후 필터링을 위해 넉넉하게
 
+      // 검색어를 단어로 분리 (array-contains는 첫 번째 단어로, 나머지는 클라이언트 필터링)
+      const searchWords = searchTerm.split(/\s+/).filter(w => w.length > 0)
+      const firstWord = searchWords[0] || searchTerm
+
       const [keywordSnapshot, brandSnapshot, affiliateLinkSnapshot, finalUrlSnapshot] = await Promise.all([
         productsRef
           .where('userId', '==', auth.userId)
-          .where('nameKeywords', 'array-contains', searchTerm)
+          .where('nameKeywords', 'array-contains', firstWord)
           .limit(searchLimit)
           .get(),
         productsRef
@@ -162,6 +166,20 @@ export async function GET(request: NextRequest) {
       addToMap(brandSnapshot.docs)
       addToMap(affiliateLinkSnapshot.docs)
       addToMap(finalUrlSnapshot.docs)
+
+      // 여러 단어 검색 시 나머지 단어로 클라이언트 필터링
+      if (searchWords.length > 1) {
+        const remainingWords = searchWords.slice(1)
+        for (const [id, product] of productMap) {
+          const name = ((product.name as string) || '').toLowerCase()
+          const brand = ((product.brand as string) || '').toLowerCase()
+          const text = `${name} ${brand}`
+          const allMatch = remainingWords.every(word => text.includes(word))
+          if (!allMatch) {
+            productMap.delete(id)
+          }
+        }
+      }
 
       let allProducts = Array.from(productMap.values())
 
