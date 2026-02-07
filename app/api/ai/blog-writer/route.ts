@@ -6,7 +6,6 @@ import { handleApiError, requireAuth } from '@/lib/api-error-handler'
 import { CreateAIWriteRequestSchema } from '@/lib/schemas/aiRequest'
 
 const AI_API_URL = process.env.AI_API_URL || 'https://api.enso-soft.xyz/v1/ai/blog-writer'
-const AI_API_KEY = process.env.AI_API_KEY
 
 // POST: AI 블로그 작성 요청
 export async function POST(request: NextRequest) {
@@ -55,6 +54,18 @@ export async function POST(request: NextRequest) {
     })
 
     const db = getDb()
+
+    // API 키 검증 (Firestore 문서 생성 전에 먼저 확인)
+    const userDoc = await db.collection('users').doc(auth.userId).get()
+    const userApiKey = userDoc.data()?.apiKey
+
+    if (!userApiKey) {
+      return NextResponse.json(
+        { success: false, error: 'API 키가 발급되지 않았습니다. 설정 페이지에서 API 키를 발급해주세요.' },
+        { status: 400 }
+      )
+    }
+
     const now = Timestamp.now()
 
     // Firestore에 요청 저장 (pending 상태)
@@ -70,18 +81,8 @@ export async function POST(request: NextRequest) {
 
     const docRef = await db.collection('ai_write_requests').add(docData)
 
-    // 외부 AI API에 비동기 요청 (응답 기다리지 않음)
-    if (AI_API_KEY) {
-      // 백그라운드에서 AI API 호출
-      callAIApi(docRef.id, validatedData, auth.userId).catch(console.error)
-    } else {
-      // AI API 키가 없으면 바로 실패 처리
-      await docRef.update({
-        status: 'failed',
-        errorMessage: 'AI API 키가 설정되지 않았습니다',
-        completedAt: Timestamp.now(),
-      })
-    }
+    // 백그라운드에서 AI API 호출
+    callAIApi(docRef.id, validatedData, auth.userId, userApiKey).catch(console.error)
 
     return NextResponse.json({
       success: true,
@@ -97,7 +98,8 @@ export async function POST(request: NextRequest) {
 async function callAIApi(
   requestId: string,
   data: { prompt: string; images: string[]; options: unknown },
-  userId: string
+  userId: string,
+  apiKey: string
 ) {
   const db = getDb()
   const requestRef = db.collection('ai_write_requests').doc(requestId)
@@ -117,7 +119,7 @@ async function callAIApi(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': AI_API_KEY!,
+        'X-API-Key': apiKey,
       },
       body: JSON.stringify(requestBody),
     })
@@ -150,6 +152,52 @@ async function callAIApi(
       errorMessage: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다',
       completedAt: Timestamp.now(),
     })
+  }
+}
+
+// PATCH: AI 요청 숨김 (dismissed)
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = await getAuthFromRequest(request)
+    requireAuth(auth)
+
+    const body = await request.json()
+    const { id } = body
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: '요청 ID가 필요합니다' },
+        { status: 400 }
+      )
+    }
+
+    const db = getDb()
+    const requestRef = db.collection('ai_write_requests').doc(id)
+    const requestDoc = await requestRef.get()
+
+    if (!requestDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: '요청을 찾을 수 없습니다' },
+        { status: 404 }
+      )
+    }
+
+    const requestData = requestDoc.data()
+    if (requestData?.userId !== auth.userId) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      )
+    }
+
+    await requestRef.update({ dismissed: true })
+
+    return NextResponse.json({
+      success: true,
+      message: '요청이 숨김 처리되었습니다',
+    })
+  } catch (error) {
+    return handleApiError(error)
   }
 }
 

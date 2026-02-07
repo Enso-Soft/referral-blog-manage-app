@@ -5,7 +5,6 @@ import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth, requireResource } from '@/lib/api-error-handler'
 
 const AI_API_URL = process.env.AI_EDITOR_API_URL || 'https://api.enso-soft.xyz/v1/ai/blog-editor'
-const AI_API_KEY = process.env.AI_API_KEY
 
 // POST: AI 글 수정 대화
 export async function POST(request: NextRequest) {
@@ -47,12 +46,15 @@ export async function POST(request: NextRequest) {
       content: doc.data().content,
     })).filter(msg => msg.content && msg.role) // 빈 메시지 필터링
 
-    // AI API 호출
-    if (!AI_API_KEY) {
+    // 유저의 API 키 조회
+    const userDoc = await db.collection('users').doc(auth.userId).get()
+    const userApiKey = userDoc.data()?.apiKey
+
+    if (!userApiKey) {
       return NextResponse.json({
-        success: true,
-        response: 'AI API 키가 설정되지 않았습니다. 관리자에게 문의해주세요.',
-      })
+        success: false,
+        error: 'API 키가 발급되지 않았습니다. 설정 페이지에서 API 키를 발급해주세요.',
+      }, { status: 400 })
     }
 
     try {
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': AI_API_KEY,
+          'X-API-Key': userApiKey,
         },
         body: JSON.stringify({
           postId,

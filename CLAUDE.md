@@ -65,7 +65,8 @@ app/api/
 ├── public/              # 외부 공개 API (X-API-Key 인증)
 │   ├── publish/         # 블로그 글 CRUD (POST/GET/PATCH/DELETE)
 │   ├── products/        # 제품 CRUD (POST/GET/PATCH/DELETE)
-│   ├── ai-requests/     # AI 글 작성 요청 CRUD (POST/GET/PATCH/DELETE)
+│   ├── ai-requests/     # AI 글 작성 요청 조회/상태 업데이트/삭제 (GET/PATCH/DELETE)
+│   ├── validate-key/    # API 키 유효성 검증 (GET)
 │   ├── docs/            # API 문서 조회 (GET) - Markdown 반환
 │   └── download/        # 이미지 다운로드 프록시 (GET)
 ├── posts/               # 내부용 글 CRUD (Bearer 토큰 인증)
@@ -150,7 +151,8 @@ build:
 |---|---|---|
 | `/api/public/publish` | POST/GET/PATCH/DELETE | 블로그 글 CRUD |
 | `/api/public/products` | POST/GET/PATCH/DELETE | 제품 CRUD |
-| `/api/public/ai-requests` | POST/GET/PATCH/DELETE | AI 글 작성 요청 CRUD |
+| `/api/public/ai-requests` | GET/PATCH/DELETE | AI 글 작성 요청 조회/상태 업데이트/삭제 |
+| `/api/public/validate-key` | GET | API 키 유효성 검증 |
 | `/api/public/docs` | GET | API 문서 조회 (Markdown 형식 반환) |
 | `/api/public/download` | GET | 이미지 다운로드 프록시 (인증 불필요) |
 

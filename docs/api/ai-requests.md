@@ -1,6 +1,6 @@
 # AI Requests API
 
-AI blog writing request CRUD API.
+AI blog writing request management API (query, update status, delete).
 
 ## Base URL
 
@@ -14,65 +14,6 @@ All requests require the `X-API-Key` header.
 
 ```
 X-API-Key: YOUR_API_KEY
-```
-
----
-
-## POST /api/public/ai-requests
-
-Create a new AI writing request.
-
-### Request
-
-**Headers:**
-| Header | Required | Description |
-|--------|----------|-------------|
-| `X-API-Key` | Yes | API key |
-| `Content-Type` | Yes | `application/json` |
-
-**Body:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `prompt` | string | Yes | Writing prompt |
-| `options` | object | Yes | Writing options (see below) |
-| `images` | string[] | No | Base64-encoded image array (`data:image/jpeg;base64,...`) |
-
-**options object:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `platform` | string | No | `"tistory"`, `"naver"`, or `"both"` |
-| `tone` | string | No | `"auto"`, `"friendly"`, `"professional"`, `"casual"`, `"concise"`, or custom string |
-| `length` | string | No | `"auto"`, `"short"`, `"medium"`, or `"long"` |
-| `productIds` | string[] | No | Product IDs to associate |
-
-### Response
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "abc123xyz",
-    "status": "pending",
-    "createdAt": "2025-01-15T12:00:00.000Z"
-  },
-  "message": "AI 글 작성 요청이 생성되었습니다."
-}
-```
-
-### Example
-
-```bash
-curl -X POST {{BASE_URL}}/api/public/ai-requests \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "올리브영 추천 화장품 리뷰 글 작성해줘",
-    "options": {
-      "platform": "tistory",
-      "tone": "friendly",
-      "length": "medium"
-    }
-  }'
 ```
 
 ---
@@ -103,14 +44,13 @@ Retrieve AI writing requests (single or list).
   "success": true,
   "data": {
     "id": "abc123xyz",
-    "prompt": "올리브영 추천 화장품 리뷰 글 작성해줘",
+    "prompt": "Write a review about top 10 Olive Young cosmetics",
     "options": {
-      "platform": "tistory",
       "tone": "friendly",
       "length": "medium"
     },
     "status": "pending",
-    "progressMessage": "초안 작성 중...",
+    "progressMessage": "Writing draft...",
     "resultPostId": null,
     "errorMessage": null,
     "createdAt": "2025-01-15T12:00:00.000Z",
@@ -127,9 +67,9 @@ Retrieve AI writing requests (single or list).
   "data": [
     {
       "id": "abc123xyz",
-      "prompt": "올리브영 추천 화장품 리뷰 글 작성해줘",
+      "prompt": "Write a review about top 10 Olive Young cosmetics",
       "status": "pending",
-      "progressMessage": "초안 작성 중...",
+      "progressMessage": "Writing draft...",
       "createdAt": "2025-01-15T12:00:00.000Z",
       "completedAt": null
     }
@@ -197,7 +137,7 @@ Update request status or progress.
     "createdAt": "2025-01-15T12:00:00.000Z",
     "completedAt": "2025-01-15T12:05:00.000Z"
   },
-  "message": "요청이 업데이트되었습니다."
+  "message": "Request updated successfully."
 }
 ```
 
@@ -210,7 +150,7 @@ curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
   -H "Content-Type: application/json" \
   -d '{
     "id": "abc123xyz",
-    "progressMessage": "초안 작성 중..."
+    "progressMessage": "Writing draft..."
   }'
 
 # Mark as success
@@ -230,8 +170,41 @@ curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
   -d '{
     "id": "abc123xyz",
     "status": "failed",
-    "errorMessage": "API 호출 실패"
+    "errorMessage": "AI API call failed"
   }'
+```
+
+### Progress Update Guidelines (Required)
+
+> **Warning: These guidelines MUST be followed.**
+
+Use `progressMessage` to keep the user informed of current progress during processing.
+
+- When starting, update the status to `"Prompt received"`.
+- Update the status at each major step:
+  - e.g., `"Researching materials"`, `"Writing draft"`, `"Processing images"`, `"Final review"`, `"Writing complete"`, etc.
+- When spawning sub-agents, either pass the progress update method to them or update the status directly.
+- When all work is complete, you **must** change `status` to `"success"`. (Include `resultPostId` if available)
+- `progressMessage` should contain **only the current step** in a concise format. Do not include previous steps.
+
+```bash
+# Update progress
+curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "abc123xyz", "progressMessage": "Writing draft"}'
+
+# Mark as success
+curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "abc123xyz", "status": "success", "resultPostId": "post123"}'
+
+# Mark as failed
+curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "abc123xyz", "status": "failed", "errorMessage": "AI API call failed"}'
 ```
 
 ---
@@ -260,7 +233,7 @@ Delete a request.
   "data": {
     "id": "abc123xyz"
   },
-  "message": "요청이 삭제되었습니다."
+  "message": "Request deleted successfully."
 }
 ```
 

@@ -5,19 +5,23 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Loader2,
   XCircle,
+  CheckCircle,
   RotateCcw,
   X,
   Sparkles,
   MessageSquareText,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/hooks/useAIWriteRequests'
 import type { AIWriteRequest } from '@/lib/schemas/aiRequest'
+import Link from 'next/link'
 
 interface AIRequestCardProps {
   request: AIWriteRequest
   onRetry: (request: AIWriteRequest) => void
   onDelete: (requestId: string) => Promise<void>
+  onDismiss: (requestId: string) => Promise<void>
   onClick: (request: AIWriteRequest) => void
   onPendingClick?: () => void
 }
@@ -26,10 +30,12 @@ export function AIRequestCard({
   request,
   onRetry,
   onDelete,
+  onDismiss,
   onClick,
   onPendingClick,
 }: AIRequestCardProps) {
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isDismissing, setIsDismissing] = useState(false)
 
   const handleDelete = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -41,12 +47,23 @@ export function AIRequestCard({
     }
   }, [onDelete, request.id])
 
+  const handleDismiss = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsDismissing(true)
+    try {
+      await onDismiss(request.id)
+    } finally {
+      setIsDismissing(false)
+    }
+  }, [onDismiss, request.id])
+
   const handleRetry = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     onRetry(request)
   }, [onRetry, request])
 
   const isPending = request.status === 'pending'
+  const isSuccess = request.status === 'success'
   const isFailed = request.status === 'failed'
 
   const handleClick = useCallback(() => {
@@ -73,6 +90,12 @@ export function AIRequestCard({
           'hover:border-violet-300 dark:hover:border-violet-700',
           'hover:shadow-lg hover:shadow-violet-500/10',
         ],
+        isSuccess && [
+          'bg-green-50 dark:bg-green-950/30',
+          'border-green-200 dark:border-green-800/50',
+          'hover:border-green-300 dark:hover:border-green-700',
+          'hover:shadow-lg hover:shadow-green-500/10',
+        ],
         isFailed && [
           'bg-red-50 dark:bg-red-950/20',
           'border-red-200 dark:border-red-800/40',
@@ -87,21 +110,48 @@ export function AIRequestCard({
           className={cn(
             'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold',
             isPending && 'bg-violet-500 text-white',
+            isSuccess && 'bg-green-500 text-white',
             isFailed && 'bg-red-500 text-white'
           )}
         >
-          {isPending ? (
+          {isPending && (
             <>
               <Loader2 className="w-3 h-3 animate-spin" />
               <span>진행중</span>
             </>
-          ) : (
+          )}
+          {isSuccess && (
+            <>
+              <CheckCircle className="w-3 h-3" />
+              <span>완료</span>
+            </>
+          )}
+          {isFailed && (
             <>
               <XCircle className="w-3 h-3" />
               <span>실패</span>
             </>
           )}
         </div>
+
+        {isSuccess && (
+          <button
+            onClick={handleDismiss}
+            disabled={isDismissing}
+            className={cn(
+              'p-1.5 rounded-lg transition-colors',
+              'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300',
+              'hover:bg-gray-200 dark:hover:bg-gray-700',
+              isDismissing && 'opacity-50'
+            )}
+          >
+            {isDismissing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <X className="w-4 h-4" />
+            )}
+          </button>
+        )}
 
         {isFailed && (
           <button
@@ -157,6 +207,20 @@ export function AIRequestCard({
           {formatRelativeTime(request.createdAt)}
         </span>
 
+        {isSuccess && request.resultPostId && (
+          <Link
+            href={`/posts/${request.resultPostId}`}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+              'text-xs font-medium transition-colors',
+              'bg-green-500 hover:bg-green-600 text-white'
+            )}
+          >
+            <ExternalLink className="w-3 h-3" />
+            글 보기
+          </Link>
+        )}
         {isFailed && (
           <button
             onClick={handleRetry}
@@ -180,16 +244,19 @@ export function AIRequestSection({
   requests,
   onRetry,
   onDelete,
+  onDismiss,
   onClick,
   onPendingClick,
 }: {
   requests: AIWriteRequest[]
   onRetry: (request: AIWriteRequest) => void
   onDelete: (requestId: string) => Promise<void>
+  onDismiss: (requestId: string) => Promise<void>
   onClick: (request: AIWriteRequest) => void
   onPendingClick?: () => void
 }) {
   const pendingCount = requests.filter(r => r.status === 'pending').length
+  const successCount = requests.filter(r => r.status === 'success').length
   const failedCount = requests.filter(r => r.status === 'failed').length
 
   return (
@@ -205,7 +272,9 @@ export function AIRequestSection({
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {pendingCount > 0 && `${pendingCount}개 진행중`}
-            {pendingCount > 0 && failedCount > 0 && ' · '}
+            {pendingCount > 0 && successCount > 0 && ' · '}
+            {successCount > 0 && `${successCount}개 완료`}
+            {(pendingCount > 0 || successCount > 0) && failedCount > 0 && ' · '}
             {failedCount > 0 && `${failedCount}개 실패`}
           </p>
         </div>
@@ -219,6 +288,7 @@ export function AIRequestSection({
             request={request}
             onRetry={onRetry}
             onDelete={onDelete}
+            onDismiss={onDismiss}
             onClick={onClick}
             onPendingClick={onPendingClick}
           />

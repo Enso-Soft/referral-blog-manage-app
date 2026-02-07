@@ -26,13 +26,30 @@ function PostList() {
   const [retryData, setRetryData] = useState<AIWriteRequest | null>(null)
   const [pendingToast, setPendingToast] = useState(false)
 
-  // 진행중 또는 실패한 요청만 필터링
   const activeAIRequests = useMemo(() => {
-    return aiRequests.filter(r => r.status === 'pending' || r.status === 'failed')
+    return aiRequests.filter(r => !r.dismissed)
   }, [aiRequests])
 
   // 드래프트 필터일 때는 AI 요청 섹션 숨김
   const showAIRequestSection = filter !== 'draft' && activeAIRequests.length > 0
+
+  // AI 요청 숨김 핸들러
+  const handleAIRequestDismiss = useCallback(async (requestId: string) => {
+    try {
+      const res = await authFetch('/api/ai/blog-writer', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: requestId }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        throw new Error(data.error || '숨김 처리에 실패했습니다')
+      }
+    } catch (err) {
+      console.error('Failed to dismiss AI request:', err)
+      throw err
+    }
+  }, [authFetch])
 
   // AI 요청 삭제 핸들러
   const handleAIRequestDelete = useCallback(async (requestId: string) => {
@@ -145,6 +162,7 @@ function PostList() {
             requests={activeAIRequests}
             onRetry={handleAIRequestRetry}
             onDelete={handleAIRequestDelete}
+            onDismiss={handleAIRequestDismiss}
             onClick={handleAIRequestClick}
             onPendingClick={handlePendingClick}
           />

@@ -168,6 +168,8 @@ export const AIWriteRequestSchema = z.object({
   createdAt: TimestampSchema,
   /** 작업 완료 시간 (AI 서버가 업데이트) */
   completedAt: TimestampSchema.optional(),
+  /** 카드 숨김 여부 (사용자가 X 버튼 클릭 시 true) */
+  dismissed: z.boolean().optional(),
 })
 
 export type AIWriteRequest = z.infer<typeof AIWriteRequestSchema>

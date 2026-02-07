@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { doc, getDoc } from 'firebase/firestore'
 import { getFirebaseDb } from '@/lib/firebase'
 import { useAuth } from '@/components/AuthProvider'
-import { Copy, RefreshCw, Check, Key, Loader2 } from 'lucide-react'
+import { Copy, RefreshCw, Check, Key, Loader2, AlertTriangle, X } from 'lucide-react'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [regenerating, setRegenerating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
 
   useEffect(() => {
     if (authLoading) return
@@ -47,11 +48,8 @@ export default function SettingsPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleRegenerate = async () => {
-    if (!confirm('API 키를 재발급하면 기존 키는 사용할 수 없습니다. 계속하시겠습니까?')) {
-      return
-    }
-
+  const handleRegenerate = useCallback(async () => {
+    setShowConfirmModal(false)
     setRegenerating(true)
     try {
       const token = await getAuthToken()
@@ -74,7 +72,7 @@ export default function SettingsPage() {
     } finally {
       setRegenerating(false)
     }
-  }
+  }, [getAuthToken])
 
   if (authLoading || loading) {
     return (
@@ -95,7 +93,7 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          이 API 키를 사용하여 외부에서 블로그 글을 등록할 수 있습니다.
+          AI 글 작성 등 외부 연동에 사용되는 키입니다. 회원가입 시 자동으로 발급됩니다.
         </p>
 
         {apiKey ? (
@@ -117,8 +115,16 @@ export default function SettingsPage() {
               </button>
             </div>
 
+            {/* 재발급 안내 */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+                API 키가 외부에 노출된 경우에만 재발급해 주세요.
+                재발급 시 기존 키는 즉시 무효화되며, AI 글 작성이 진행 중인 경우 진행 상태가 누락될 수 있습니다.
+              </p>
+            </div>
+
             <button
-              onClick={handleRegenerate}
+              onClick={() => setShowConfirmModal(true)}
               disabled={regenerating}
               className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
@@ -130,7 +136,7 @@ export default function SettingsPage() {
           <div className="text-gray-500 dark:text-gray-400">
             API 키가 없습니다. 재발급 버튼을 눌러 생성하세요.
             <button
-              onClick={handleRegenerate}
+              onClick={() => setShowConfirmModal(true)}
               disabled={regenerating}
               className="mt-4 flex items-center gap-2 px-4 py-2 text-sm text-white bg-gray-900 dark:bg-gray-100 dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
@@ -139,83 +145,65 @@ export default function SettingsPage() {
             </button>
           </div>
         )}
+      </div>
 
-        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">API 요약</h3>
+      {/* 재발급 확인 모달 */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowConfirmModal(false)}
+          />
+          <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-6">
+            <button
+              onClick={() => setShowConfirmModal(false)}
+              className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-          {/* API 문서 엔드포인트 안내 */}
-          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <div className="flex items-center gap-2 mb-2">
-              <code className="text-sm font-mono font-semibold text-blue-800 dark:text-blue-200">/api/public/docs</code>
-              <span className="text-sm text-blue-600 dark:text-blue-300">- API Documentation Endpoint</span>
-            </div>
-            <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
-              상세 API 문서를 Markdown 형식으로 반환합니다. 각 엔드포인트의 파라미터, 요청/응답 예시, curl 명령어를 확인할 수 있습니다.
-            </p>
-            <div className="space-y-2 text-xs text-blue-600 dark:text-blue-400 mb-3">
-              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/public/docs</code> - 전체 API 문서</div>
-              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/public/docs?resource=publish</code> - Publish API만</div>
-              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/public/docs?resource=products</code> - Products API만</div>
-              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/public/docs?resource=ai-requests</code> - AI Requests API만</div>
-            </div>
-            <pre className="px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
-{`curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/public/docs"`}
-            </pre>
-          </div>
-
-          {/* API 요약 목록 */}
-          <div className="space-y-3">
-            {/* /api/public/publish */}
-            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <div className="flex items-center gap-2 mb-1">
-                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/public/publish</code>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/30">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">블로그 글 CRUD (POST/GET/PATCH/DELETE)</p>
-              <pre className="mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
-{`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/public/publish \\
-  -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"title": "제목", "content": "<p>내용</p>"}'`}
-              </pre>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                API 키 재발급
+              </h3>
             </div>
 
-            {/* /api/public/products */}
-            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <div className="flex items-center gap-2 mb-1">
-                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/public/products</code>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">제품 CRUD (POST/GET/PATCH/DELETE)</p>
-              <pre className="mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
-{`curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/public/products?page=1&limit=20"`}
-              </pre>
+            <div className="space-y-3 mb-6">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                정말 API 키를 재발급하시겠습니까?
+              </p>
+              <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-amber-500 mt-0.5">&#8226;</span>
+                  기존 키는 즉시 무효화되며 복구할 수 없습니다.
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-amber-500 mt-0.5">&#8226;</span>
+                  AI 글 작성이 진행 중인 경우 진행 상태가 누락될 수 있습니다.
+                </li>
+              </ul>
             </div>
 
-            {/* /api/public/ai-requests */}
-            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <div className="flex items-center gap-2 mb-1">
-                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/public/ai-requests</code>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">AI 글 작성 요청 CRUD (POST/GET/PATCH/DELETE)</p>
-              <pre className="mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
-{`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/public/ai-requests \\
-  -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"prompt": "글 작성 요청", "options": {"platform": "tistory"}}'`}
-              </pre>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleRegenerate}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+              >
+                재발급
+              </button>
             </div>
-
-          </div>
-
-          {/* 인증 안내 */}
-          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              모든 API는 <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">X-API-Key</code> 헤더로 인증합니다.
-            </p>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
