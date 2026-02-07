@@ -174,37 +174,88 @@ curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
   }'
 ```
 
-### Progress Update Guidelines (Required)
+### Progress Update Guidelines (MANDATORY)
 
-> **Warning: These guidelines MUST be followed.**
+> **CRITICAL: You MUST follow ALL of these rules. Failure to update progress will result in the user seeing a stuck "pending" state with no feedback. This is a blocking requirement — not optional.**
 
-Use `progressMessage` to keep the user informed of current progress during processing.
+#### Rule 1: Update progress BEFORE every major step
 
-- When starting, update the status to `"Prompt received"`.
-- Update the status at each major step:
-  - e.g., `"Researching materials"`, `"Writing draft"`, `"Processing images"`, `"Final review"`, `"Writing complete"`, etc.
-- When spawning sub-agents, either pass the progress update method to them or update the status directly.
-- When all work is complete, you **must** change `status` to `"success"`. (Include `resultPostId` if available)
-- `progressMessage` should contain **only the current step** in a concise format. Do not include previous steps.
+You MUST call `PATCH /api/public/ai-requests` to update `progressMessage` **before** you begin each step. Do NOT batch updates or skip them. The user is watching the progress in real-time.
+
+**Example sequence (adapt messages to your actual workflow):**
+
+```
+PATCH → {"progressMessage": "describing your current step"}
+  ... do work ...
+PATCH → {"progressMessage": "describing your next step"}
+  ... do work ...
+PATCH → {"progressMessage": "describing your next step"}
+  ... do work ...
+PATCH → {"status": "success", "resultPostId": "..."}
+```
+
+Write `progressMessage` in a way that accurately describes what you are currently doing. You MUST have **at least 3 progress updates** before marking as success.
+
+#### Rule 2: Sub-agents MUST also update progress
+
+If you spawn sub-agents or delegate tasks:
+
+- You MUST pass `requestId`, `API_KEY`, and `BASE_URL` to every sub-agent.
+- Every sub-agent MUST call `PATCH /api/public/ai-requests` independently to update progress for its own step.
+- Do NOT rely on the parent agent to update progress on behalf of sub-agents.
+- If a sub-agent cannot call the API directly, the parent agent MUST update progress immediately after each sub-agent completes.
+
+**Example instruction to pass to sub-agents:**
+
+```
+Before starting your task, you MUST update the progress:
+
+curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
+  -H "X-API-Key: {{API_KEY}}" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "{{REQUEST_ID}}", "progressMessage": "YOUR_CURRENT_STEP"}'
+
+When your task is complete, update the progress again with the next step.
+```
+
+#### Rule 3: Only show current step
+
+`progressMessage` MUST contain **only the current step** in a short, concise format. Do NOT include previous steps or timestamps.
+
+```
+"초안 작성 중"        ← correct
+"[2/5] 초안 작성 중"  ← correct
+"자료 조사 완료, 초안 작성 중" ← wrong (includes previous step)
+```
+
+#### Rule 4: Always set final status
+
+When all work is complete, you MUST change `status` to `"success"`. Include `resultPostId` if a blog post was created.
+
+If any error occurs at any point, you MUST change `status` to `"failed"` with a clear `errorMessage`.
+
+**Never leave a request in `"pending"` status permanently.**
+
+#### API calls
 
 ```bash
-# Update progress
+# Update progress (call this BEFORE each step)
 curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"id": "abc123xyz", "progressMessage": "Writing draft"}'
+  -d '{"id": "abc123xyz", "progressMessage": "초안 작성 중"}'
 
-# Mark as success
+# Mark as success (MUST be called when all work is done)
 curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"id": "abc123xyz", "status": "success", "resultPostId": "post123"}'
 
-# Mark as failed
+# Mark as failed (MUST be called on any error)
 curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"id": "abc123xyz", "status": "failed", "errorMessage": "AI API call failed"}'
+  -d '{"id": "abc123xyz", "status": "failed", "errorMessage": "Error description"}'
 ```
 
 ---

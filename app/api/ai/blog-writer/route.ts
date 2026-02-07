@@ -126,21 +126,17 @@ async function callAIApi(
 
     console.log('[AI API] 응답 status:', response.status)
 
+    const responseBody = await response.json().catch(() => ({}))
+    console.log('[AI API] 응답 body:', JSON.stringify(responseBody))
+
     // 실패 응답: statusCode !== 200, body: {"detail": "에러 메시지"}
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      console.error('[AI API] 실패 응답:', JSON.stringify(errorData))
-      throw new Error(errorData.detail || `AI API 오류: ${response.status}`)
+      console.error(`[AI API] 요청 거부 (${response.status}):`, responseBody.detail || JSON.stringify(responseBody))
+      throw new Error(responseBody.detail || `AI API 오류: ${response.status}`)
     }
 
-    // 성공 응답: statusCode === 200, body: {"success": true}
-    // AI에게 요청 전달 성공 = pending 상태 유지
-    // 실제 글 작성 완료는 AI 서버가 직접 Firestore를 업데이트함
-    const result = await response.json()
-    console.log('[AI API] 성공 응답:', JSON.stringify(result))
-
-    if (!result.success) {
-      throw new Error(result.detail || 'AI API 응답이 올바르지 않습니다')
+    if (!responseBody.success) {
+      throw new Error(responseBody.detail || 'AI API 응답이 올바르지 않습니다')
     }
 
     // 요청 전달 성공 - pending 상태 유지 (Firestore 업데이트 불필요)
