@@ -62,9 +62,9 @@ export async function POST(request: NextRequest) {
       userId: auth.userId,
       userEmail: auth.email,
       prompt: validatedData.prompt,
-      images: validatedData.images,
       options: validatedData.options,
       status: 'pending' as const,
+      progressMessage: 'AI에게 전달하는 중...',
       createdAt: now,
     }
 
@@ -103,24 +103,31 @@ async function callAIApi(
   const requestRef = db.collection('ai_write_requests').doc(requestId)
 
   try {
+    const requestBody = {
+      requestId,
+      userId,
+      prompt: data.prompt,
+      images: data.images,
+      options: data.options,
+    }
+    console.log('[AI API] 요청 URL:', AI_API_URL)
+    console.log('[AI API] 요청 body:', JSON.stringify({ ...requestBody, images: `[${data.images.length}개 이미지]` }))
+
     const response = await fetch(AI_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': AI_API_KEY!,
       },
-      body: JSON.stringify({
-        requestId,
-        userId,
-        prompt: data.prompt,
-        images: data.images,
-        options: data.options,
-      }),
+      body: JSON.stringify(requestBody),
     })
+
+    console.log('[AI API] 응답 status:', response.status)
 
     // 실패 응답: statusCode !== 200, body: {"detail": "에러 메시지"}
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
+      console.error('[AI API] 실패 응답:', JSON.stringify(errorData))
       throw new Error(errorData.detail || `AI API 오류: ${response.status}`)
     }
 
@@ -128,6 +135,7 @@ async function callAIApi(
     // AI에게 요청 전달 성공 = pending 상태 유지
     // 실제 글 작성 완료는 AI 서버가 직접 Firestore를 업데이트함
     const result = await response.json()
+    console.log('[AI API] 성공 응답:', JSON.stringify(result))
 
     if (!result.success) {
       throw new Error(result.detail || 'AI API 응답이 올바르지 않습니다')
@@ -135,6 +143,7 @@ async function callAIApi(
 
     // 요청 전달 성공 - pending 상태 유지 (Firestore 업데이트 불필요)
   } catch (error) {
+    console.error('[AI API] 에러:', error instanceof Error ? error.message : error)
     // 실패 시 Firestore 업데이트
     await requestRef.update({
       status: 'failed',

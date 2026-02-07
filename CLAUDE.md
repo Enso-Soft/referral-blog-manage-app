@@ -49,10 +49,43 @@ npm run start    # Start production server
 - `HtmlCodeEditor.tsx` - Monaco-based HTML editor with scroll sync
 - `TiptapEditor.tsx` - WYSIWYG editor (alternative, dynamic import)
 
-### Routes
+### Routes (Pages)
 - `/` - Post list with status filter (draft/published)
 - `/posts/[id]` - Post detail view with HTML copy button
 - `/posts/[id]/edit` - Edit post with split-view editor
+- `/products` - 제품 목록
+- `/settings` - API 키 관리 및 API 사용법 안내
+- `/admin` - 관리자 대시보드
+- `/auth/login` - 로그인
+
+### API Routes
+
+```
+app/api/
+├── public/              # 외부 공개 API (X-API-Key 인증)
+│   ├── publish/         # 블로그 글 CRUD (POST/GET/PATCH/DELETE)
+│   ├── products/        # 제품 CRUD (POST/GET/PATCH/DELETE)
+│   ├── ai-requests/     # AI 글 작성 요청 CRUD (POST/GET/PATCH/DELETE)
+│   ├── docs/            # API 문서 조회 (GET) - Markdown 반환
+│   └── download/        # 이미지 다운로드 프록시 (GET)
+├── posts/               # 내부용 글 CRUD (Bearer 토큰 인증)
+│   ├── route.ts         # GET (목록)
+│   └── [id]/route.ts    # GET/PATCH/DELETE (단건)
+├── admin/               # 관리자 API (Bearer 토큰 + admin role)
+│   ├── contents/        # 전체 콘텐츠 관리
+│   ├── stats/           # 통계
+│   └── users/           # 사용자 관리
+├── ai/                  # AI 기능
+│   ├── blog-writer/     # AI 글 작성
+│   └── blog-editor/     # AI 글 편집
+├── auth/register/       # 회원가입
+├── settings/api-key/    # API 키 발급/재발급
+└── upload/              # 파일 업로드
+```
+
+**내부 vs 외부 API 구분:**
+- `api/public/*` - 외부 연동용. `X-API-Key` 헤더로 인증
+- `api/posts/*`, `api/admin/*` 등 - 프론트엔드 내부용. Firebase Bearer 토큰 인증
 
 ### Firestore Collections
 
@@ -107,27 +140,45 @@ build:
 
 `@/*` maps to project root (configured in tsconfig.json)
 
-## External API 사용법
+## External API (Public API)
 
-API 사용법이 필요하면 `/api/docs` 엔드포인트를 호출하세요:
+외부 연동용 API는 `/api/public/` 하위에 위치하며, 모든 요청에 `X-API-Key` 헤더가 필수.
 
-```bash
-# 전체 API 문서 조회
-curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/docs
+### 엔드포인트 목록
 
-# Publish API 문서만 조회
-curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/docs?resource=publish
+| 엔드포인트 | 메서드 | 설명 |
+|---|---|---|
+| `/api/public/publish` | POST/GET/PATCH/DELETE | 블로그 글 CRUD |
+| `/api/public/products` | POST/GET/PATCH/DELETE | 제품 CRUD |
+| `/api/public/ai-requests` | POST/GET/PATCH/DELETE | AI 글 작성 요청 CRUD |
+| `/api/public/docs` | GET | API 문서 조회 (Markdown 형식 반환) |
+| `/api/public/download` | GET | 이미지 다운로드 프록시 (인증 불필요) |
 
-# Products API 문서만 조회
-curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/docs?resource=products
+### 인증
+
+```
+X-API-Key: YOUR_API_KEY
 ```
 
-**인증**: 모든 API 요청에 `X-API-Key` 헤더 필수
+API 키는 설정 페이지(`/settings`)에서 발급/재발급 가능.
 
-**주요 API 엔드포인트**:
-- `/api/publish` - 블로그 글 CRUD
-- `/api/products` - 제품 CRUD
-- `/api/docs` - API 문서 조회
+### API 문서 조회
+
+상세 파라미터, 요청/응답 예시는 `/api/public/docs`에서 Markdown으로 조회 가능:
+
+```bash
+curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/public/docs
+curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/public/docs?resource=publish
+curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/public/docs?resource=products
+curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/public/docs?resource=ai-requests
+```
+
+### 문서 파일 위치
+
+API 문서 원본은 `docs/api/` 디렉토리에 Markdown 파일로 관리:
+- `docs/api/publish.md` - Publish API 상세 문서
+- `docs/api/products.md` - Products API 상세 문서
+- `docs/api/ai-requests.md` - AI Requests API 상세 문서
 
 ## Blog HTML 작성 가이드 (다크모드 대응)
 

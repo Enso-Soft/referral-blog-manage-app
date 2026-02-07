@@ -126,7 +126,7 @@ function PostDetail() {
 
   // 이미지 다운로드 (서버 프록시 사용)
   const handleDownload = useCallback((imageUrl: string, customFileName?: string) => {
-    let downloadUrl = `/api/download?url=${encodeURIComponent(imageUrl)}`
+    let downloadUrl = `/api/public/download?url=${encodeURIComponent(imageUrl)}`
     if (customFileName) {
       downloadUrl += `&filename=${encodeURIComponent(customFileName)}`
     }

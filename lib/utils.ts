@@ -88,3 +88,61 @@ export function debounce<T extends (...args: Parameters<T>) => void>(
         timeoutId = setTimeout(() => fn(...args), delay)
     }) as T
 }
+
+/**
+ * 이미지 파일을 리사이즈하여 새 File 객체로 반환
+ * 긴 변 기준으로 maxSize에 맞추고 JPEG로 변환
+ */
+export async function resizeImageFile(
+    file: File,
+    maxSize: number = 1920,
+    quality: number = 0.85
+): Promise<File> {
+    return new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => {
+            let { width, height } = img
+
+            // 리사이즈 필요 없으면 원본 반환
+            if (width <= maxSize && height <= maxSize) {
+                URL.revokeObjectURL(img.src)
+                resolve(file)
+                return
+            }
+
+            // 비율 유지하며 축소
+            if (width > height) {
+                height = Math.round(height * (maxSize / width))
+                width = maxSize
+            } else {
+                width = Math.round(width * (maxSize / height))
+                height = maxSize
+            }
+
+            const canvas = document.createElement('canvas')
+            canvas.width = width
+            canvas.height = height
+            const ctx = canvas.getContext('2d')!
+            ctx.drawImage(img, 0, 0, width, height)
+            URL.revokeObjectURL(img.src)
+
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) {
+                        reject(new Error('이미지 리사이즈 실패'))
+                        return
+                    }
+                    const resized = new File([blob], file.name, {
+                        type: 'image/jpeg',
+                        lastModified: Date.now(),
+                    })
+                    resolve(resized)
+                },
+                'image/jpeg',
+                quality
+            )
+        }
+        img.onerror = () => reject(new Error('이미지 로드 실패'))
+        img.src = URL.createObjectURL(file)
+    })
+}

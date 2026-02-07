@@ -146,48 +146,63 @@ export default function SettingsPage() {
           {/* API 문서 엔드포인트 안내 */}
           <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
             <div className="flex items-center gap-2 mb-2">
-              <code className="text-sm font-mono font-semibold text-blue-800 dark:text-blue-200">/api/docs</code>
+              <code className="text-sm font-mono font-semibold text-blue-800 dark:text-blue-200">/api/public/docs</code>
               <span className="text-sm text-blue-600 dark:text-blue-300">- API Documentation Endpoint</span>
             </div>
             <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
               상세 API 문서를 Markdown 형식으로 반환합니다. 각 엔드포인트의 파라미터, 요청/응답 예시, curl 명령어를 확인할 수 있습니다.
             </p>
             <div className="space-y-2 text-xs text-blue-600 dark:text-blue-400 mb-3">
-              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/docs</code> - 전체 API 문서</div>
-              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/docs?resource=publish</code> - Publish API만</div>
-              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/docs?resource=products</code> - Products API만</div>
+              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/public/docs</code> - 전체 API 문서</div>
+              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/public/docs?resource=publish</code> - Publish API만</div>
+              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/public/docs?resource=products</code> - Products API만</div>
+              <div><code className="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">GET /api/public/docs?resource=ai-requests</code> - AI Requests API만</div>
             </div>
             <pre className="px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
 {`curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/docs"`}
+  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/public/docs"`}
             </pre>
           </div>
 
           {/* API 요약 목록 */}
           <div className="space-y-3">
-            {/* /api/publish */}
+            {/* /api/public/publish */}
             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
               <div className="flex items-center gap-2 mb-1">
-                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/publish</code>
+                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/public/publish</code>
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-400">블로그 글 CRUD (POST/GET/PATCH/DELETE)</p>
               <pre className="mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
-{`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/publish \\
+{`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/public/publish \\
   -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
   -d '{"title": "제목", "content": "<p>내용</p>"}'`}
               </pre>
             </div>
 
-            {/* /api/products */}
+            {/* /api/public/products */}
             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
               <div className="flex items-center gap-2 mb-1">
-                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/products</code>
+                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/public/products</code>
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-400">제품 CRUD (POST/GET/PATCH/DELETE)</p>
               <pre className="mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
 {`curl -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
-  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/products?page=1&limit=20"`}
+  "${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/public/products?page=1&limit=20"`}
+              </pre>
+            </div>
+
+            {/* /api/public/ai-requests */}
+            <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <code className="text-sm font-mono font-medium text-gray-800 dark:text-gray-200">/api/public/ai-requests</code>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">AI 글 작성 요청 CRUD (POST/GET/PATCH/DELETE)</p>
+              <pre className="mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-950 rounded text-xs text-gray-100 overflow-x-auto">
+{`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app'}/api/public/ai-requests \\
+  -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"prompt": "글 작성 요청", "options": {"platform": "tistory"}}'`}
               </pre>
             </div>
 

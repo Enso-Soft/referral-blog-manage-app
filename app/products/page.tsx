@@ -55,7 +55,7 @@ function ProductList() {
       setError(null)
 
       try {
-        let url = `/api/products?limit=${ITEMS_PER_PAGE}`
+        let url = `/api/public/products?limit=${ITEMS_PER_PAGE}`
         if (lastId) {
           url += `&lastId=${lastId}`
         }

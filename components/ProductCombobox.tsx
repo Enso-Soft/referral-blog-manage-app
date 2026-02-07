@@ -62,8 +62,8 @@ export function ProductCombobox({
     setLoading(true)
     try {
       const url = query.trim()
-        ? `/api/products?search=${encodeURIComponent(query.trim())}&limit=10`
-        : '/api/products?limit=10'
+        ? `/api/public/products?search=${encodeURIComponent(query.trim())}&limit=10`
+        : '/api/public/products?limit=10'
 
       const res = await authFetch(url)
       const data = await res.json()

@@ -5,7 +5,7 @@ Blog post CRUD API.
 ## Base URL
 
 ```
-{{BASE_URL}}/api/publish
+{{BASE_URL}}/api/public/publish
 ```
 
 ## Authentication
@@ -18,7 +18,7 @@ X-API-Key: YOUR_API_KEY
 
 ---
 
-## POST /api/publish
+## POST /api/public/publish
 
 Create a new blog post.
 
@@ -71,7 +71,7 @@ Create a new blog post.
 ### Example
 
 ```bash
-curl -X POST {{BASE_URL}}/api/publish \
+curl -X POST {{BASE_URL}}/api/public/publish \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -87,7 +87,7 @@ curl -X POST {{BASE_URL}}/api/publish \
 
 ---
 
-## GET /api/publish
+## GET /api/public/publish
 
 Retrieve posts (single or list).
 
@@ -155,20 +155,20 @@ Retrieve posts (single or list).
 ```bash
 # Single post (includes content)
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/publish?id=abc123xyz"
+  "{{BASE_URL}}/api/public/publish?id=abc123xyz"
 
 # List posts
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/publish?page=1&limit=10"
+  "{{BASE_URL}}/api/public/publish?page=1&limit=10"
 
 # Filter by status
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/publish?status=published"
+  "{{BASE_URL}}/api/public/publish?status=published"
 ```
 
 ---
 
-## PATCH /api/publish
+## PATCH /api/public/publish
 
 Update a post.
 
@@ -215,7 +215,7 @@ Update a post.
 ### Example
 
 ```bash
-curl -X PATCH {{BASE_URL}}/api/publish \
+curl -X PATCH {{BASE_URL}}/api/public/publish \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -227,7 +227,7 @@ curl -X PATCH {{BASE_URL}}/api/publish \
 
 ---
 
-## DELETE /api/publish
+## DELETE /api/public/publish
 
 Delete a post.
 
@@ -259,7 +259,7 @@ Delete a post.
 
 ```bash
 curl -X DELETE -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/publish?id=abc123xyz"
+  "{{BASE_URL}}/api/public/publish?id=abc123xyz"
 ```
 
 ---

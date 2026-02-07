@@ -7,7 +7,7 @@ const DOCS_DIR = join(process.cwd(), 'docs', 'api')
 const API_VERSION = '1.0.0'
 
 // 사용 가능한 리소스 목록
-const AVAILABLE_RESOURCES = ['publish', 'products'] as const
+const AVAILABLE_RESOURCES = ['publish', 'products', 'ai-requests'] as const
 type ResourceType = (typeof AVAILABLE_RESOURCES)[number]
 
 // 마크다운 파일 읽기

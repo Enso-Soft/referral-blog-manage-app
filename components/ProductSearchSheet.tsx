@@ -47,7 +47,7 @@ export function ProductSearchSheet({ isOpen, onClose, onSelect }: ProductSearchS
     setError(null)
 
     try {
-      let url = '/api/products?limit=' + ITEMS_PER_PAGE
+      let url = '/api/public/products?limit=' + ITEMS_PER_PAGE
 
       if (query.trim()) {
         url += `&search=${encodeURIComponent(query.trim())}`

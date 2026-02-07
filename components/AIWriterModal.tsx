@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import {
   X,
   Sparkles,
@@ -19,13 +20,12 @@ import {
   ChevronRight,
   Trash2,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, resizeImageFile } from '@/lib/utils'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { useAIWriteRequests, formatRelativeTime } from '@/hooks/useAIWriteRequests'
 import {
   TONE_OPTIONS,
   LENGTH_OPTIONS,
-  PLATFORM_OPTIONS,
   type AIWriteOptions,
   type AIWriteRequest,
 } from '@/lib/schemas/aiRequest'
@@ -48,10 +48,11 @@ const MAX_IMAGES = 10
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
 
 export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps) {
+  const [isMounted, setIsMounted] = useState(false)
+
   // Form state
   const [prompt, setPrompt] = useState('')
   const [images, setImages] = useState<{ file: File; preview: string }[]>([])
-  const [platform, setPlatform] = useState<'tistory' | 'naver' | 'both'>('tistory')
   const [toneType, setToneType] = useState<string>('auto')
   const [customTone, setCustomTone] = useState('')
   const [length, setLength] = useState<'auto' | 'short' | 'medium' | 'long'>('auto')
@@ -79,11 +80,14 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
   const fileInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
   // retryData가 변경되면 폼에 복원
   useEffect(() => {
     if (retryData && isOpen) {
       setPrompt(retryData.prompt)
-      setPlatform(retryData.options.platform)
       if (retryData.options.tone) {
         const found = TONE_OPTIONS.find(t => t.label === retryData.options.tone)
         if (found) {
@@ -141,36 +145,48 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
 
   // Body scroll 막기
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
+    if (!isOpen) return
+
+    const { body, documentElement } = document
+    const prevBodyOverflow = body.style.overflow
+    const prevBodyPaddingRight = body.style.paddingRight
+    const prevHtmlOverflow = documentElement.style.overflow
+    const scrollbarWidth = window.innerWidth - documentElement.clientWidth
+
+    body.style.overflow = 'hidden'
+    documentElement.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight = `${scrollbarWidth}px`
     }
+
     return () => {
-      document.body.style.overflow = ''
+      body.style.overflow = prevBodyOverflow
+      body.style.paddingRight = prevBodyPaddingRight
+      documentElement.style.overflow = prevHtmlOverflow
     }
   }, [isOpen])
 
   // 이미지 선택 핸들러
-  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     const validFiles: { file: File; preview: string }[] = []
 
-    files.forEach(file => {
-      if (images.length + validFiles.length >= MAX_IMAGES) return
-      if (file.size > MAX_IMAGE_SIZE) {
-        setSubmitError('이미지 크기는 5MB 이하여야 합니다')
-        return
-      }
+    for (const file of files) {
+      if (images.length + validFiles.length >= MAX_IMAGES) break
       if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
         setSubmitError('jpg, jpeg, png, webp 형식만 지원합니다')
-        return
+        continue
       }
-      validFiles.push({
-        file,
-        preview: URL.createObjectURL(file),
-      })
-    })
+      try {
+        const resized = await resizeImageFile(file, 1920, 0.85)
+        validFiles.push({
+          file: resized,
+          preview: URL.createObjectURL(resized),
+        })
+      } catch {
+        setSubmitError('이미지 처리 중 오류가 발생했습니다')
+      }
+    }
 
     setImages(prev => [...prev, ...validFiles])
     if (fileInputRef.current) {
@@ -218,7 +234,6 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
       const formData = new FormData()
       formData.append('prompt', prompt.trim())
       formData.append('options', JSON.stringify({
-        platform,
         tone,
         length,
         productIds: selectedProducts.map(p => p.affiliateLink),
@@ -273,7 +288,6 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
   // 재시도
   const handleRetry = async (request: AIWriteRequest) => {
     setPrompt(request.prompt)
-    setPlatform(request.options.platform)
     if (request.options.tone) {
       const found = TONE_OPTIONS.find(t => t.label === request.options.tone)
       if (found) {
@@ -305,9 +319,9 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
     }
   }, [currentPage, totalPages, hasMore, loadMore])
 
-  if (!isOpen) return null
+  if (!isMounted || !isOpen) return null
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -317,26 +331,24 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
             onClick={onClose}
           />
 
           {/* Modal */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 pointer-events-none"
-          >
-            <div
-              className="relative w-full max-w-2xl max-h-[90vh] bg-white dark:bg-gray-900
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+              className="relative w-full max-w-2xl max-h-full bg-white dark:bg-gray-900
                          rounded-2xl shadow-2xl overflow-hidden pointer-events-auto
-                         border border-gray-200 dark:border-gray-800"
+                         border border-gray-200 dark:border-gray-800 flex flex-col"
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4
+              <div className="flex-shrink-0 flex items-center justify-between px-6 py-4
                               bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-fuchsia-500/10
                               dark:from-violet-500/20 dark:via-purple-500/20 dark:to-fuchsia-500/20
                               border-b border-gray-200 dark:border-gray-800 backdrop-blur-xl">
@@ -365,7 +377,8 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
               {/* Content */}
               <div
                 id="ai-writer-modal-content"
-                className="overflow-y-auto max-h-[calc(90vh-80px)] p-6 space-y-6"
+                className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6
+                           [mask-image:linear-gradient(to_bottom,transparent,black_16px,black_calc(100%-16px),transparent)]"
               >
                 {/* 에러 메시지 */}
                 <AnimatePresence>
@@ -410,6 +423,9 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
                       ({images.length}/{MAX_IMAGES})
                     </span>
                   </label>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    첨부한 이미지는 AI가 글에 직접 사용하거나, 참고하여 이미지를 생성하는 데 활용됩니다.
+                  </p>
 
                   <div className="flex flex-wrap gap-3">
                     {images.map((img, idx) => (
@@ -480,27 +496,6 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
                         transition={{ duration: 0.2 }}
                         className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700"
                       >
-                        {/* 플랫폼 */}
-                        <div className="space-y-2">
-                          <label className="text-sm text-gray-600 dark:text-gray-400">플랫폼</label>
-                          <div className="flex gap-2">
-                            {PLATFORM_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.value}
-                                onClick={() => setPlatform(opt.value)}
-                                className={cn(
-                                  'px-4 py-2 text-sm font-medium rounded-lg transition-all',
-                                  platform === opt.value
-                                    ? 'bg-violet-500 text-white shadow-md'
-                                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600'
-                                )}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
                         {/* 글 톤 */}
                         <div className="space-y-2">
                           <label className="text-sm text-gray-600 dark:text-gray-400">글 톤</label>
@@ -563,32 +558,6 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
                   </AnimatePresence>
                 </div>
 
-                {/* 요청하기 버튼 */}
-                <button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || !prompt.trim()}
-                  className={cn(
-                    'w-full py-4 rounded-xl font-semibold text-white transition-all',
-                    'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
-                    'hover:from-violet-600 hover:via-purple-600 hover:to-fuchsia-600',
-                    'disabled:opacity-50 disabled:cursor-not-allowed',
-                    'shadow-lg hover:shadow-xl hover:scale-[1.02]',
-                    'flex items-center justify-center gap-2'
-                  )}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      요청 중...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5" />
-                      요청하기
-                    </>
-                  )}
-                </button>
-
                 {/* 요청 이력 */}
                 <div className="pt-6 border-t border-gray-200 dark:border-gray-700 space-y-4">
                   <h3 className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -645,11 +614,42 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
                   )}
                 </div>
               </div>
-            </div>
-          </motion.div>
+
+              {/* 요청하기 버튼 (하단 고정) */}
+              <div className="flex-shrink-0 px-6 py-4 border-t border-gray-200 dark:border-gray-800
+                              bg-white dark:bg-gray-900">
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || !prompt.trim()}
+                  className={cn(
+                    'w-full py-4 rounded-xl font-semibold text-white transition-all',
+                    'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
+                    'hover:from-violet-600 hover:via-purple-600 hover:to-fuchsia-600',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                    'shadow-lg hover:shadow-xl hover:scale-[1.02]',
+                    'flex items-center justify-center gap-2'
+                  )}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      요청 중...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      요청하기
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
+    ,
+    document.body
   )
 }
 

@@ -5,7 +5,7 @@ Product CRUD API.
 ## Base URL
 
 ```
-{{BASE_URL}}/api/products
+{{BASE_URL}}/api/public/products
 ```
 
 ## Authentication
@@ -18,7 +18,7 @@ X-API-Key: YOUR_API_KEY
 
 ---
 
-## POST /api/products
+## POST /api/public/products
 
 Create a new product.
 
@@ -74,7 +74,7 @@ Create a new product.
 ### Example
 
 ```bash
-curl -X POST {{BASE_URL}}/api/products \
+curl -X POST {{BASE_URL}}/api/public/products \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -91,7 +91,7 @@ curl -X POST {{BASE_URL}}/api/products \
 
 ---
 
-## GET /api/products
+## GET /api/public/products
 
 Retrieve products (single or list).
 
@@ -173,28 +173,28 @@ Retrieve products (single or list).
 ```bash
 # Single product
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/products?id=abc123"
+  "{{BASE_URL}}/api/public/products?id=abc123"
 
 # List products (page-based)
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/products?page=1&perPage=20"
+  "{{BASE_URL}}/api/public/products?page=1&perPage=20"
 
 # Search
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/products?keyword=cream"
+  "{{BASE_URL}}/api/public/products?keyword=cream"
 
 # Price range filter
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/products?keyword=cream&minPrice=10000&maxPrice=50000"
+  "{{BASE_URL}}/api/public/products?keyword=cream&minPrice=10000&maxPrice=50000"
 
 # Cursor-based pagination
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/products?lastId=userId_productId&perPage=20"
+  "{{BASE_URL}}/api/public/products?lastId=userId_productId&perPage=20"
 ```
 
 ---
 
-## PATCH /api/products
+## PATCH /api/public/products
 
 Update a product.
 
@@ -237,7 +237,7 @@ Update a product.
 ### Example
 
 ```bash
-curl -X PATCH {{BASE_URL}}/api/products \
+curl -X PATCH {{BASE_URL}}/api/public/products \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -249,7 +249,7 @@ curl -X PATCH {{BASE_URL}}/api/products \
 
 ---
 
-## DELETE /api/products
+## DELETE /api/public/products
 
 Delete a product.
 
@@ -278,7 +278,7 @@ Delete a product.
 
 ```bash
 curl -X DELETE -H "X-API-Key: YOUR_API_KEY" \
-  "{{BASE_URL}}/api/products?id=abc123"
+  "{{BASE_URL}}/api/public/products?id=abc123"
 ```
 
 ---

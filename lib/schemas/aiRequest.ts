@@ -28,6 +28,8 @@ import { TimestampSchema } from './post'
  * │ status          │ string            │ ✅   │ 'pending'|'success'|'failed'│
  * │ resultPostId    │ string | null     │ ❌   │ 생성된 블로그 글 ID         │
  * │ errorMessage    │ string | null     │ ❌   │ 실패 시 에러 메시지         │
+ * │ progressMessage │ string | null     │ ❌   │ 진행 상태 메시지            │
+ * │                 │                   │      │ (pending 중 세부 진행 표시) │
  * │ createdAt       │ Timestamp         │ ✅   │ 요청 생성 시간              │
  * │ completedAt     │ Timestamp | null  │ ❌   │ 작업 완료 시간              │
  * └─────────────────────────────────────────────────────────────────────────┘
@@ -36,7 +38,7 @@ import { TimestampSchema } from './post'
  * ┌─────────────────────────────────────────────────────────────────────────┐
  * │ 필드명          │ 타입              │ 필수 │ 설명                        │
  * ├─────────────────────────────────────────────────────────────────────────┤
- * │ platform        │ string            │ ✅   │ 'tistory'|'naver'|'both'    │
+ * │ platform        │ string            │ ❌   │ 'tistory'|'naver'|'both'    │
  * │ tone            │ string | null     │ ❌   │ 글 톤 (아래 TONE_OPTIONS)   │
  * │                 │                   │      │ 'auto'면 AI가 알아서 판단   │
  * │ length          │ string | null     │ ❌   │ 'auto'|'short'|'medium'|    │
@@ -86,7 +88,7 @@ import { TimestampSchema } from './post'
  * │ thumbnail       │ string            │ ❌   │ 썸네일 이미지 URL           │
  * │ keywords        │ string[]          │ ✅   │ 키워드/태그 배열            │
  * │ status          │ string            │ ✅   │ 'draft' | 'published'       │
- * │ platform        │ string            │ ✅   │ 'tistory'|'naver'|'both'    │
+ * │ platform        │ string            │ ❌   │ 'tistory'|'naver'|'both'    │
  * │ createdAt       │ Timestamp         │ ✅   │ 생성 시간                   │
  * │ updatedAt       │ Timestamp         │ ✅   │ 수정 시간                   │
  * │ metadata        │ object            │ ❌   │ 추가 메타데이터             │
@@ -100,8 +102,8 @@ import { TimestampSchema } from './post'
 
 // AI 글 작성 요청 옵션 스키마
 export const AIWriteOptionsSchema = z.object({
-  /** 타겟 플랫폼: 'tistory' | 'naver' | 'both' */
-  platform: z.enum(['tistory', 'naver', 'both']),
+  /** 타겟 플랫폼: 'tistory' | 'naver' | 'both' (옵션) */
+  platform: z.enum(['tistory', 'naver', 'both']).optional(),
   /**
    * 글 톤/스타일
    * - 'auto': AI가 알아서 판단
@@ -160,6 +162,8 @@ export const AIWriteRequestSchema = z.object({
   resultPostId: z.string().optional(),
   /** 에러 메시지 (실패 시, AI 서버가 업데이트) */
   errorMessage: z.string().optional(),
+  /** 진행 상태 메시지 (pending 중 세부 진행 표시, AI 서버가 업데이트) */
+  progressMessage: z.string().optional(),
   /** 요청 생성 시간 (웹앱에서 설정) */
   createdAt: TimestampSchema,
   /** 작업 완료 시간 (AI 서버가 업데이트) */

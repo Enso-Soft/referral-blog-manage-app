@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Loader2,
   XCircle,
   RotateCcw,
   X,
   Sparkles,
+  MessageSquareText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/hooks/useAIWriteRequests'
@@ -130,6 +131,25 @@ export function AIRequestCard({
       <p className="text-sm font-medium text-gray-800 dark:text-gray-100 line-clamp-2 mb-3">
         {request.prompt}
       </p>
+
+      {/* Progress Message */}
+      <AnimatePresence mode="wait">
+        {isPending && request.progressMessage && (
+          <motion.div
+            key={request.progressMessage}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-center gap-1.5 mb-3"
+          >
+            <MessageSquareText className="w-3 h-3 flex-shrink-0 text-violet-600 dark:text-violet-400" />
+            <p className="text-xs text-violet-600 dark:text-violet-400 truncate">
+              {request.progressMessage}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
       <div className="flex items-center justify-between">
