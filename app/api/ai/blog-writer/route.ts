@@ -75,14 +75,14 @@ export async function POST(request: NextRequest) {
       prompt: validatedData.prompt,
       options: validatedData.options,
       status: 'pending' as const,
-      progressMessage: 'AI에게 전달하는 중...',
+      progressMessage: 'AI가 요청을 분석하고 있어요',
       createdAt: now,
     }
 
     const docRef = await db.collection('ai_write_requests').add(docData)
 
-    // 백그라운드에서 AI API 호출
-    callAIApi(docRef.id, validatedData, auth.userId, userApiKey).catch(console.error)
+    // AI API 호출 (Lambda 환경에서는 응답 반환 후 동결되므로 await 필수)
+    await callAIApi(docRef.id, validatedData, auth.userId, userApiKey)
 
     return NextResponse.json({
       success: true,

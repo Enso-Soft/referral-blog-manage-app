@@ -169,13 +169,8 @@ function PostDetail() {
   }, [post?.id, post?.postType, statusChanging, authFetch])
 
   const handleStatusChange = useCallback(async () => {
-    if (!post?.id) return
+    if (!post?.id || statusChanging) return
     const newStatus = post.status === 'draft' ? 'published' : 'draft'
-    const confirmMessage = newStatus === 'published'
-      ? '이 글을 발행하시겠습니까?'
-      : '이 글을 초안으로 변경하시겠습니까?'
-
-    if (!window.confirm(confirmMessage)) return
 
     setStatusChanging(true)
     try {
@@ -187,16 +182,14 @@ function PostDetail() {
       const data = await res.json()
 
       if (!data.success) {
-        alert('상태 변경에 실패했습니다: ' + data.error)
+        console.error('Failed to update status')
       }
-      // 성공 시 Firestore 실시간 구독으로 자동 반영됨
     } catch (err) {
-      alert('상태 변경에 실패했습니다.')
       console.error(err)
     } finally {
       setStatusChanging(false)
     }
-  }, [post?.id, post?.status, authFetch])
+  }, [post?.id, post?.status, statusChanging, authFetch])
 
   const handleDisclaimerInsert = useCallback(async (html: string) => {
     if (!post?.id) return
