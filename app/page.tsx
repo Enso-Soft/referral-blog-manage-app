@@ -26,15 +26,18 @@ function PostList() {
   const [retryData, setRetryData] = useState<AIWriteRequest | null>(null)
   const [pendingToast, setPendingToast] = useState(false)
 
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
+
   const activeAIRequests = useMemo(() => {
-    return aiRequests.filter(r => !r.dismissed)
-  }, [aiRequests])
+    return aiRequests.filter(r => !r.dismissed && !hiddenIds.has(r.id))
+  }, [aiRequests, hiddenIds])
 
   // 드래프트 필터일 때는 AI 요청 섹션 숨김
   const showAIRequestSection = filter !== 'draft' && activeAIRequests.length > 0
 
   // AI 요청 숨김 핸들러
   const handleAIRequestDismiss = useCallback(async (requestId: string) => {
+    setHiddenIds(prev => new Set(prev).add(requestId))
     try {
       const res = await authFetch('/api/ai/blog-writer', {
         method: 'PATCH',
@@ -47,12 +50,18 @@ function PostList() {
       }
     } catch (err) {
       console.error('Failed to dismiss AI request:', err)
+      setHiddenIds(prev => {
+        const next = new Set(prev)
+        next.delete(requestId)
+        return next
+      })
       throw err
     }
   }, [authFetch])
 
   // AI 요청 삭제 핸들러
   const handleAIRequestDelete = useCallback(async (requestId: string) => {
+    setHiddenIds(prev => new Set(prev).add(requestId))
     try {
       const res = await authFetch(`/api/ai/blog-writer?id=${requestId}`, {
         method: 'DELETE',
@@ -63,6 +72,11 @@ function PostList() {
       }
     } catch (err) {
       console.error('Failed to delete AI request:', err)
+      setHiddenIds(prev => {
+        const next = new Set(prev)
+        next.delete(requestId)
+        return next
+      })
       throw err
     }
   }, [authFetch])
@@ -157,16 +171,26 @@ function PostList() {
       {/* AI Request Section + Filters Container */}
       <div className="space-y-4">
         {/* AI Request Section - 필터 위에 배치 */}
-        {showAIRequestSection && (
-          <AIRequestSection
-            requests={activeAIRequests}
-            onRetry={handleAIRequestRetry}
-            onDelete={handleAIRequestDelete}
-            onDismiss={handleAIRequestDismiss}
-            onClick={handleAIRequestClick}
-            onPendingClick={handlePendingClick}
-          />
-        )}
+        <AnimatePresence>
+          {showAIRequestSection && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <AIRequestSection
+                requests={activeAIRequests}
+                onRetry={handleAIRequestRetry}
+                onDelete={handleAIRequestDelete}
+                onDismiss={handleAIRequestDismiss}
+                onClick={handleAIRequestClick}
+                onPendingClick={handlePendingClick}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4">

@@ -76,14 +76,16 @@ export function AIRequestCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
+      layout
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
+      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
       onClick={handleClick}
       className={cn(
         'relative cursor-pointer flex-shrink-0',
         'w-[280px] p-4 rounded-xl flex flex-col',
-        'border transition-all duration-200',
+        'border',
         isPending && [
           'bg-violet-50 dark:bg-violet-950/30',
           'border-violet-200 dark:border-violet-800/50',
@@ -289,17 +291,19 @@ export function AIRequestSection({
 
       {/* Cards */}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
-        {requests.map((request) => (
-          <AIRequestCard
-            key={request.id}
-            request={request}
-            onRetry={onRetry}
-            onDelete={onDelete}
-            onDismiss={onDismiss}
-            onClick={onClick}
-            onPendingClick={onPendingClick}
-          />
-        ))}
+        <AnimatePresence mode="popLayout">
+          {requests.map((request) => (
+            <AIRequestCard
+              key={request.id}
+              request={request}
+              onRetry={onRetry}
+              onDelete={onDelete}
+              onDismiss={onDismiss}
+              onClick={onClick}
+              onPendingClick={onPendingClick}
+            />
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   )
