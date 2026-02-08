@@ -82,7 +82,7 @@ export function AIRequestCard({
       onClick={handleClick}
       className={cn(
         'relative cursor-pointer flex-shrink-0',
-        'w-[280px] p-4 rounded-xl',
+        'w-[280px] p-4 rounded-xl flex flex-col',
         'border transition-all duration-200',
         isPending && [
           'bg-violet-50 dark:bg-violet-950/30',
@@ -201,8 +201,15 @@ export function AIRequestCard({
         )}
       </AnimatePresence>
 
+      {/* Error Message */}
+      {isFailed && request.errorMessage && (
+        <p className="text-xs text-red-600 dark:text-red-400 mb-3 line-clamp-2">
+          {request.errorMessage}
+        </p>
+      )}
+
       {/* Footer */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mt-auto">
         <span className="text-xs text-gray-500 dark:text-gray-400">
           {formatRelativeTime(request.createdAt)}
         </span>

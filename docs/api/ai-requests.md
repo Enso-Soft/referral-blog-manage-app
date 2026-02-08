@@ -119,11 +119,13 @@ Update request status or progress.
 | `status` | string | No | `"pending"`, `"success"`, or `"failed"` |
 | `progressMessage` | string | No | Progress message (shown during pending) |
 | `resultPostId` | string | No | Created blog post ID (on success) |
-| `errorMessage` | string | No | Error message (on failure) |
+| `errorMessage` | string | No | Error message (on failure). **This message is displayed to the user in the UI.** |
 
 > **Note:** When `status` is changed to `"success"` or `"failed"`, `completedAt` is automatically set.
 
 ### Response
+
+#### Success Response
 
 ```json
 {
@@ -134,6 +136,24 @@ Update request status or progress.
     "progressMessage": null,
     "resultPostId": "post123",
     "errorMessage": null,
+    "createdAt": "2025-01-15T12:00:00.000Z",
+    "completedAt": "2025-01-15T12:05:00.000Z"
+  },
+  "message": "Request updated successfully."
+}
+```
+
+#### Failed Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "abc123xyz",
+    "status": "failed",
+    "progressMessage": null,
+    "resultPostId": null,
+    "errorMessage": "요청이 거부되었습니다.",
     "createdAt": "2025-01-15T12:00:00.000Z",
     "completedAt": "2025-01-15T12:05:00.000Z"
   },
@@ -172,6 +192,76 @@ curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
     "status": "failed",
     "errorMessage": "AI API call failed"
   }'
+```
+
+### Failure Handling Guide
+
+When an external AI API call fails, capture the error detail and pass it as `errorMessage`. This message is **displayed directly to the user** in the request card UI.
+
+#### Example: AI API returns error
+
+If the AI API responds with:
+
+```
+HTTP 400
+{"detail": "요청이 거부되었습니다."}
+```
+
+Then update the request like this:
+
+```bash
+curl -X PATCH {{BASE_URL}}/api/public/ai-requests \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "abc123xyz",
+    "status": "failed",
+    "errorMessage": "요청이 거부되었습니다."
+  }'
+```
+
+#### Common error message examples
+
+| Scenario | Example `errorMessage` |
+|----------|----------------------|
+| AI API 400 error | `"요청이 거부되었습니다."` (pass `detail` from response) |
+| AI API timeout | `"AI API 응답 시간 초과"` |
+| AI API 500 error | `"AI 서버 내부 오류 (status: 500)"` |
+| Network error | `"AI API 연결 실패"` |
+| Invalid response | `"AI API 응답 형식 오류"` |
+| Rate limit | `"요청 한도 초과. 잠시 후 다시 시도해주세요."` |
+
+#### Pseudocode
+
+```python
+try:
+    response = requests.post("https://api.enso-soft.xyz/v1/ai/blog-writer", ...)
+
+    if response.status_code != 200:
+        error_detail = response.json().get("detail", f"AI API 오류 (status: {response.status_code})")
+        # Mark as failed with the error detail
+        requests.patch(f"{BASE_URL}/api/public/ai-requests", json={
+            "id": request_id,
+            "status": "failed",
+            "errorMessage": error_detail
+        }, headers={"X-API-Key": API_KEY})
+        return
+
+    # ... process success ...
+
+except requests.exceptions.Timeout:
+    requests.patch(f"{BASE_URL}/api/public/ai-requests", json={
+        "id": request_id,
+        "status": "failed",
+        "errorMessage": "AI API 응답 시간 초과"
+    }, headers={"X-API-Key": API_KEY})
+
+except requests.exceptions.ConnectionError:
+    requests.patch(f"{BASE_URL}/api/public/ai-requests", json={
+        "id": request_id,
+        "status": "failed",
+        "errorMessage": "AI API 연결 실패"
+    }, headers={"X-API-Key": API_KEY})
 ```
 
 ### Progress Update Guidelines (MANDATORY)
