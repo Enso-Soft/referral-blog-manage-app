@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { Eye, Code, AlertTriangle, Save, Loader2, Columns } from 'lucide-react'
+import { DisclaimerButtons } from './DisclaimerButtons'
 
 // Dynamic imports for heavy editors
 const HtmlCodeEditor = dynamic(
@@ -305,6 +306,10 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          <DisclaimerButtons
+            content={content}
+            onInsert={(html) => handleContentChange(html + '\n' + content)}
+          />
           {content !== originalContent.current && (
             <button
               onClick={handleReset}
