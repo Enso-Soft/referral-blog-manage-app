@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || ''
     const userId = searchParams.get('userId') || ''
     const search = searchParams.get('search') || ''
+    const perPage = Math.min(parseInt(searchParams.get('limit') || '20', 10), 50)
+    const lastId = searchParams.get('lastId') || ''
 
     const db = getDb()
     let query: FirebaseFirestore.Query = db.collection('blog_posts')
@@ -32,19 +34,32 @@ export async function GET(request: NextRequest) {
 
     query = query.orderBy('createdAt', 'desc')
 
+    // 커서 기반 페이지네이션
+    if (lastId) {
+      const lastDoc = await db.collection('blog_posts').doc(lastId).get()
+      if (lastDoc.exists) {
+        query = query.startAfter(lastDoc)
+      }
+    }
+
+    query = query.limit(perPage)
+
     const snapshot = await query.get()
 
-    // 사용자 정보 캐시 (N+1 쿼리 방지)
+    // 사용자 정보 일괄 조회 (getAll로 단일 요청)
     const userIds = Array.from(new Set(snapshot.docs.map((doc) => doc.data().userId).filter(Boolean)))
-    const usersSnapshot = await Promise.all(
-      userIds.map((uid) => db.collection('users').doc(uid).get())
-    )
-    const usersMap = new Map(
-      usersSnapshot.map((doc) => [
-        doc.id,
-        doc.exists ? { email: doc.data()?.email, displayName: doc.data()?.displayName } : null,
-      ])
-    )
+    const usersMap = new Map<string, { email: string; displayName: string } | null>()
+
+    if (userIds.length > 0) {
+      const userRefs = userIds.map((uid) => db.collection('users').doc(uid))
+      const userDocs = await db.getAll(...userRefs)
+      userDocs.forEach((doc) => {
+        usersMap.set(
+          doc.id,
+          doc.exists ? { email: doc.data()?.email, displayName: doc.data()?.displayName } : null
+        )
+      })
+    }
 
     let contents = snapshot.docs.map((doc) => {
       const data = doc.data()
@@ -77,7 +92,19 @@ export async function GET(request: NextRequest) {
         displayName: userData!.displayName,
       }))
 
-    return NextResponse.json({ success: true, contents, authors })
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1]
+
+    return NextResponse.json({
+      success: true,
+      contents,
+      authors,
+      pagination: {
+        limit: perPage,
+        count: contents.length,
+        lastId: lastDoc?.id || null,
+        hasMore: snapshot.docs.length === perPage,
+      },
+    })
   } catch (error) {
     console.error('GET contents error:', error)
     return NextResponse.json(

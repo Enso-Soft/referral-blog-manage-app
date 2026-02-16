@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react'
 import { type User } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { getFirebaseDb } from '@/lib/firebase'
@@ -87,19 +87,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const getAuthToken = async () => {
+  const getAuthToken = useCallback(async () => {
     try {
       const { getIdToken } = await import('@/lib/auth')
       return getIdToken()
     } catch {
       return null
     }
-  }
+  }, [])
 
   const isAdmin = userProfile?.role === 'admin'
 
+  const value = useMemo(() => ({
+    user, userProfile, loading, isAdmin, getAuthToken
+  }), [user, userProfile, loading, isAdmin, getAuthToken])
+
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, isAdmin, getAuthToken }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

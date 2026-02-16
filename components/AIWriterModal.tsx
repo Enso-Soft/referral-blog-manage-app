@@ -22,10 +22,8 @@ import {
 } from 'lucide-react'
 import { cn, resizeImageFile } from '@/lib/utils'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
-import { useAIWriteRequests, formatRelativeTime } from '@/hooks/useAIWriteRequests'
+import { formatRelativeTime } from '@/hooks/useAIWriteRequests'
 import {
-  TONE_OPTIONS,
-  LENGTH_OPTIONS,
   type AIWriteOptions,
   type AIWriteRequest,
 } from '@/lib/schemas/aiRequest'
@@ -36,6 +34,13 @@ interface AIWriterModalProps {
   isOpen: boolean
   onClose: () => void
   retryData?: AIWriteRequest | null
+  // AI request data (부모에서 전달받아 이중 구독 방지)
+  requests: AIWriteRequest[]
+  requestsLoading: boolean
+  hasMore: boolean
+  loadMore: () => Promise<void>
+  latestCompletedRequest: AIWriteRequest | null
+  clearLatestCompleted: () => void
 }
 
 interface SelectedProduct {
@@ -47,19 +52,23 @@ interface SelectedProduct {
 const MAX_IMAGES = 10
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
 
-export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps) {
+const EXAMPLE_PROMPTS = [
+  '올리브영 추천 화장품 10가지 소개',
+  '초보자를 위한 홈트레이닝 루틴',
+  '가성비 노트북 비교 리뷰',
+  '서울 근교 당일치기 여행지 추천',
+]
+
+export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLoading, hasMore, loadMore, latestCompletedRequest, clearLatestCompleted }: AIWriterModalProps) {
   const [isMounted, setIsMounted] = useState(false)
 
   // Form state
   const [prompt, setPrompt] = useState('')
   const [images, setImages] = useState<{ file: File; preview: string }[]>([])
-  const [toneType, setToneType] = useState<string>('auto')
-  const [customTone, setCustomTone] = useState('')
-  const [length, setLength] = useState<'auto' | 'short' | 'medium' | 'long'>('auto')
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([])
 
   // UI state
-  const [isOptionsExpanded, setIsOptionsExpanded] = useState(true)
+  const [isOptionsExpanded, setIsOptionsExpanded] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitPhase, setSubmitPhase] = useState<'idle' | 'sending'>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -69,15 +78,8 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
   const itemsPerPage = 5
 
   const { authFetch } = useAuthFetch()
-  const {
-    requests,
-    loading: requestsLoading,
-    hasMore,
-    loadMore,
-    latestCompletedRequest,
-    clearLatestCompleted,
-  } = useAIWriteRequests()
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -85,22 +87,18 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
     setIsMounted(true)
   }, [])
 
+  // textarea 자동 높이 조절
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+  }, [prompt])
+
   // retryData가 변경되면 폼에 복원
   useEffect(() => {
     if (retryData && isOpen) {
       setPrompt(retryData.prompt)
-      if (retryData.options.tone) {
-        const found = TONE_OPTIONS.find(t => t.label === retryData.options.tone)
-        if (found) {
-          setToneType(found.value)
-        } else {
-          setToneType('custom')
-          setCustomTone(retryData.options.tone)
-        }
-      }
-      if (retryData.options.length) {
-        setLength(retryData.options.length)
-      }
       // 스크롤을 맨 위로
       setTimeout(() => {
         const modal = document.getElementById('ai-writer-modal-content')
@@ -231,13 +229,9 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
     setSubmitError(null)
 
     try {
-      const tone = toneType === 'custom' ? customTone : TONE_OPTIONS.find(t => t.value === toneType)?.label
-
       const formData = new FormData()
       formData.append('prompt', prompt.trim())
       formData.append('options', JSON.stringify({
-        tone,
-        length,
         productIds: selectedProducts.map(p => p.affiliateLink),
       } as AIWriteOptions))
 
@@ -260,9 +254,6 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
       setPrompt('')
       setImages([])
       setSelectedProducts([])
-      setToneType('friendly')
-      setCustomTone('')
-      setLength('medium')
       onClose()
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : '요청 중 오류가 발생했습니다')
@@ -291,18 +282,6 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
   // 재시도
   const handleRetry = async (request: AIWriteRequest) => {
     setPrompt(request.prompt)
-    if (request.options.tone) {
-      const found = TONE_OPTIONS.find(t => t.label === request.options.tone)
-      if (found) {
-        setToneType(found.value)
-      } else {
-        setToneType('custom')
-        setCustomTone(request.options.tone)
-      }
-    }
-    if (request.options.length) {
-      setLength(request.options.length)
-    }
     // 스크롤을 맨 위로
     const modal = document.getElementById('ai-writer-modal-content')
     modal?.scrollTo({ top: 0, behavior: 'smooth' })
@@ -399,22 +378,57 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
                 </AnimatePresence>
 
                 {/* 프롬프트 입력 */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                     <span className="text-lg">📝</span>
                     프롬프트 입력
                   </label>
-                  <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="예: 올리브영 추천 화장품 10가지 소개 글 작성해줘"
-                    rows={4}
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-xl
-                               bg-white dark:bg-gray-800 text-gray-900 dark:text-white
-                               placeholder:text-gray-400 dark:placeholder:text-gray-500
-                               focus:ring-2 focus:ring-violet-500 focus:border-transparent
-                               resize-none transition-all"
-                  />
+                  <div className="relative">
+                    <textarea
+                      ref={textareaRef}
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && prompt.trim() && !isSubmitting) {
+                          e.preventDefault()
+                          handleSubmit()
+                        }
+                      }}
+                      placeholder="어떤 블로그 글을 작성할까요?"
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-xl
+                                 bg-white dark:bg-gray-800 text-gray-900 dark:text-white
+                                 placeholder:text-gray-400 dark:placeholder:text-gray-500
+                                 focus:ring-2 focus:ring-violet-500 focus:border-transparent
+                                 resize-none transition-all overflow-hidden"
+                    />
+                    {prompt.length > 0 && (
+                      <div className="mt-1.5 px-1">
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                          {prompt.length}자
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {/* 예시 프롬프트 칩 */}
+                  {!prompt && (
+                    <div className="flex flex-wrap gap-2">
+                      {EXAMPLE_PROMPTS.map((example, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setPrompt(example)}
+                          className="px-3 py-1.5 text-xs rounded-lg
+                                     bg-violet-50 dark:bg-violet-900/20
+                                     text-violet-600 dark:text-violet-400
+                                     border border-violet-200 dark:border-violet-800
+                                     hover:bg-violet-100 dark:hover:bg-violet-900/40
+                                     transition-colors"
+                        >
+                          {example}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* 이미지 첨부 */}
@@ -499,56 +513,12 @@ export function AIWriterModal({ isOpen, onClose, retryData }: AIWriterModalProps
                         transition={{ duration: 0.2 }}
                         className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700"
                       >
-                        {/* 글 톤 */}
-                        <div className="space-y-2">
-                          <label className="text-sm text-gray-600 dark:text-gray-400">글 톤</label>
-                          <select
-                            value={toneType}
-                            onChange={(e) => setToneType(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-                                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                                       focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                          >
-                            {TONE_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                          {toneType === 'custom' && (
-                            <input
-                              type="text"
-                              value={customTone}
-                              onChange={(e) => setCustomTone(e.target.value)}
-                              placeholder="원하는 톤을 입력하세요"
-                              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-                                         bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                                         focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                            />
-                          )}
-                        </div>
-
-                        {/* 글 길이 */}
-                        <div className="space-y-2">
-                          <label className="text-sm text-gray-600 dark:text-gray-400">글 길이</label>
-                          <select
-                            value={length}
-                            onChange={(e) => setLength(e.target.value as 'short' | 'medium' | 'long')}
-                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-                                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                                       focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                          >
-                            {LENGTH_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
                         {/* 제품 연동 */}
                         <div className="space-y-2">
                           <label className="text-sm text-gray-600 dark:text-gray-400">제품 연동</label>
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            쿠팡 파트너스/네이버 커넥트의 제휴 링크를 프롬프트에 직접 입력해도 AI가 자동으로 인식합니다.
+                          </p>
                           <ProductCombobox
                             selectedProducts={selectedProducts}
                             onSelect={handleProductSelect}

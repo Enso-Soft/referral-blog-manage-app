@@ -19,6 +19,9 @@ interface UsePostsReturn {
   setTypeFilter: (filter: 'all' | 'general' | 'affiliate') => void
   scrollPosition: number
   setScrollPosition: (position: number) => void
+  loadingMore: boolean
+  hasMore: boolean
+  loadMore: () => void
 }
 
 export function usePosts(options: UsePostsOptions = {}): UsePostsReturn {

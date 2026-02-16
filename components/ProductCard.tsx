@@ -7,6 +7,7 @@ interface Product {
   id: string
   name: string
   affiliateLink: string
+  finalUrl?: string
   price?: number
   brand?: string
   mall?: string
@@ -18,6 +19,13 @@ interface Product {
   }
 }
 
+function detectPlatform(affiliateLink: string, finalUrl?: string): 'coupang' | 'naver' | null {
+  const urls = [affiliateLink, finalUrl].filter(Boolean).join(' ').toLowerCase()
+  if (urls.includes('coupang')) return 'coupang'
+  if (urls.includes('naver')) return 'naver'
+  return null
+}
+
 interface ProductCardProps {
   product: Product
 }
@@ -27,6 +35,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const images = product.images || []
   const hasMultipleImages = images.length > 1
+  const platform = detectPlatform(product.affiliateLink, product.finalUrl)
 
   const handleCopyLink = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -57,9 +66,9 @@ export function ProductCard({ product }: ProductCardProps) {
   }
 
   return (
-    <div className="bg-card dark:bg-slate-800 rounded-xl border border-border dark:border-slate-700 overflow-hidden hover:shadow-lg hover:border-indigo-500/50 transition-all duration-300">
+    <div className="bg-card dark:bg-slate-800 rounded-xl border border-border dark:border-slate-700 overflow-hidden hover:shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
       {/* Thumbnail with Slider */}
-      <div className="aspect-square bg-secondary/50 relative group">
+      <div className="h-60 bg-secondary/50 relative group flex-shrink-0">
         {images.length > 0 ? (
           <img
             src={images[currentImageIndex]}
@@ -108,14 +117,24 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Category Badge */}
-        {product.category && (
-          <div className="absolute top-2 left-2">
+        {/* Category + Platform Badges */}
+        <div className="absolute top-2 left-2 flex gap-1">
+          {product.category && (
             <span className="px-2 py-1 text-xs bg-black/60 text-white rounded-full">
               {product.category.level2}
             </span>
-          </div>
-        )}
+          )}
+          {platform === 'coupang' && (
+            <span className="px-2 py-1 text-xs font-medium bg-[#E6282D] text-white rounded-full">
+              쿠팡
+            </span>
+          )}
+          {platform === 'naver' && (
+            <span className="px-2 py-1 text-xs font-medium bg-[#03C75A] text-white rounded-full">
+              네이버
+            </span>
+          )}
+        </div>
 
         {/* Image Count Badge */}
         {hasMultipleImages && (
@@ -128,7 +147,7 @@ export function ProductCard({ product }: ProductCardProps) {
       </div>
 
       {/* Content */}
-      <div className="p-4">
+      <div className="p-4 flex flex-col flex-1">
         {/* Brand */}
         {product.brand && (
           <p className="text-xs text-muted-foreground mb-1">{product.brand}</p>
@@ -155,12 +174,18 @@ export function ProductCard({ product }: ProductCardProps) {
         )}
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 mt-auto pt-3">
           <a
             href={product.affiliateLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+            className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+              platform === 'coupang'
+                ? 'bg-[#E6282D] hover:bg-[#C42025]'
+                : platform === 'naver'
+                  ? 'bg-[#03C75A] hover:bg-[#02B050]'
+                  : 'bg-green-600 hover:bg-green-700'
+            }`}
           >
             <ExternalLink className="w-4 h-4" />
             제품 보기

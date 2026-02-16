@@ -40,18 +40,31 @@ export async function verifyIdToken(token: string) {
   return decodedToken
 }
 
-// 사용자 역할 확인 (Firestore users 컬렉션에서)
-export async function getUserRole(userId: string): Promise<'admin' | 'user'> {
+// 사용자 데이터 캐시 (역할 + API 키)
+const userDataCache = new Map<string, { role: 'admin' | 'user'; apiKey?: string; expiry: number }>()
+const CACHE_TTL = 5 * 60 * 1000 // 5분
+
+async function getCachedUserData(userId: string): Promise<{ role: 'admin' | 'user'; apiKey?: string }> {
+  const cached = userDataCache.get(userId)
+  if (cached && Date.now() < cached.expiry) {
+    return { role: cached.role, apiKey: cached.apiKey }
+  }
+
   ensureAdminInitialized()
   const db = getFirestore()
   const userDoc = await db.collection('users').doc(userId).get()
 
-  if (!userDoc.exists) {
-    return 'user'
-  }
+  const role = userDoc.exists && userDoc.data()?.role === 'admin' ? 'admin' : 'user'
+  const apiKey = userDoc.exists ? userDoc.data()?.apiKey : undefined
 
-  const userData = userDoc.data()
-  return userData?.role === 'admin' ? 'admin' : 'user'
+  userDataCache.set(userId, { role, apiKey, expiry: Date.now() + CACHE_TTL })
+  return { role, apiKey }
+}
+
+// 사용자 역할 확인 (Firestore users 컬렉션에서, 캐싱 적용)
+export async function getUserRole(userId: string): Promise<'admin' | 'user'> {
+  const { role } = await getCachedUserData(userId)
+  return role
 }
 
 // 사용자가 Admin인지 확인
@@ -65,6 +78,7 @@ export async function getAuthFromRequest(request: Request): Promise<{
   userId: string
   email: string
   isAdmin: boolean
+  apiKey?: string
 } | null> {
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
@@ -75,12 +89,13 @@ export async function getAuthFromRequest(request: Request): Promise<{
 
   try {
     const decodedToken = await verifyIdToken(token)
-    const adminStatus = await isAdmin(decodedToken.uid)
+    const { role, apiKey } = await getCachedUserData(decodedToken.uid)
 
     return {
       userId: decodedToken.uid,
       email: decodedToken.email || '',
-      isAdmin: adminStatus,
+      isAdmin: role === 'admin',
+      apiKey,
     }
   } catch (error) {
     console.error('Token verification failed:', error)
@@ -93,6 +108,7 @@ export async function getAuthFromApiKey(request: Request): Promise<{
   userId: string
   email: string
   isAdmin: boolean
+  apiKey?: string
 } | null> {
   const apiKey = request.headers.get('X-API-Key')
   if (!apiKey) {
@@ -112,10 +128,18 @@ export async function getAuthFromApiKey(request: Request): Promise<{
     const data = doc.data()
     const adminStatus = data?.role === 'admin'
 
+    // 캐시에 저장
+    userDataCache.set(doc.id, {
+      role: adminStatus ? 'admin' : 'user',
+      apiKey,
+      expiry: Date.now() + CACHE_TTL,
+    })
+
     return {
       userId: doc.id,
       email: data.email || '',
       isAdmin: adminStatus,
+      apiKey,
     }
   } catch (error) {
     console.error('API Key verification failed:', error)
@@ -128,6 +152,7 @@ export async function getAuthFromRequestOrApiKey(request: Request): Promise<{
   userId: string
   email: string
   isAdmin: boolean
+  apiKey?: string
 } | null> {
   // API Key 먼저 확인
   const apiKeyAuth = await getAuthFromApiKey(request)

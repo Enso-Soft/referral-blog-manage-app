@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
     // 목록 조회
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 100)
+    const lastId = searchParams.get('lastId')
     const status = searchParams.get('status')
 
     let query = db.collection('ai_write_requests')
@@ -68,7 +69,17 @@ export async function GET(request: NextRequest) {
       query = query.where('status', '==', status)
     }
 
-    const snapshot = await query.limit(limit).offset((page - 1) * limit).get()
+    // 커서 기반 페이지네이션 (lastId 우선, 없으면 page 기반 하위 호환)
+    if (lastId) {
+      const lastDoc = await db.collection('ai_write_requests').doc(lastId).get()
+      if (lastDoc.exists) {
+        query = query.startAfter(lastDoc)
+      }
+    } else if (page > 1) {
+      query = query.offset((page - 1) * limit)
+    }
+
+    const snapshot = await query.limit(limit).get()
 
     const requests = snapshot.docs.map((doc) => {
       const data = doc.data()
@@ -82,6 +93,8 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1]
+
     return NextResponse.json({
       success: true,
       data: requests,
@@ -89,6 +102,8 @@ export async function GET(request: NextRequest) {
         page,
         limit,
         count: requests.length,
+        lastId: lastDoc?.id || null,
+        hasMore: snapshot.docs.length === limit,
       },
     })
   } catch (error) {
@@ -172,19 +187,19 @@ export async function PATCH(request: NextRequest) {
 
     await docRef.update(updateData)
 
-    const updatedDoc = await docRef.get()
-    const updatedData = updatedDoc.data()!
+    // 기존 데이터 + 업데이트 데이터 merge로 응답 구성 (재조회 불필요)
+    const mergedData = { ...existingData, ...updateData }
 
     return NextResponse.json({
       success: true,
       data: {
-        id: updatedDoc.id,
-        status: updatedData.status,
-        progressMessage: updatedData.progressMessage || null,
-        resultPostId: updatedData.resultPostId || null,
-        errorMessage: updatedData.errorMessage || null,
-        createdAt: updatedData.createdAt?.toDate?.()?.toISOString() || null,
-        completedAt: updatedData.completedAt?.toDate?.()?.toISOString() || null,
+        id: body.id,
+        status: mergedData.status,
+        progressMessage: mergedData.progressMessage || null,
+        resultPostId: mergedData.resultPostId || null,
+        errorMessage: mergedData.errorMessage || null,
+        createdAt: existingData.createdAt?.toDate?.()?.toISOString() || null,
+        completedAt: mergedData.completedAt?.toDate?.()?.toISOString() || null,
       },
       message: '요청이 업데이트되었습니다.',
     })

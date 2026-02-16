@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
+import { SeoAnalysisSchema, ThreadsContentSchema } from '@/lib/schemas'
 
 interface UserData {
   uid: string
@@ -69,6 +70,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!body.slug) {
+      return NextResponse.json(
+        { success: false, error: 'slug 필드는 필수입니다.' },
+        { status: 400 }
+      )
+    }
+
+    if (!body.excerpt) {
+      return NextResponse.json(
+        { success: false, error: 'excerpt 필드는 필수입니다.' },
+        { status: 400 }
+      )
+    }
+
+    // seoAnalysis 검증 (optional)
+    let seoData: any = undefined
+    if (body.seoAnalysis) {
+      const seoResult = SeoAnalysisSchema.safeParse(body.seoAnalysis)
+      if (!seoResult.success) {
+        return NextResponse.json(
+          { success: false, error: 'seoAnalysis 형식이 올바르지 않습니다.', details: seoResult.error.flatten() },
+          { status: 400 }
+        )
+      }
+      seoData = seoResult.data
+    }
+
+    // threads 검증 (optional)
+    let threadsData: any = undefined
+    if (body.threads) {
+      const threadsResult = ThreadsContentSchema.safeParse(body.threads)
+      if (!threadsResult.success) {
+        return NextResponse.json(
+          { success: false, error: 'threads 형식이 올바르지 않습니다.', details: threadsResult.error.flatten() },
+          { status: 400 }
+        )
+      }
+      threadsData = threadsResult.data
+    }
+
     const db = getDb()
     const now = Timestamp.now()
 
@@ -80,16 +121,32 @@ export async function POST(request: NextRequest) {
     // postType 자동 설정 (제품이 있으면 제휴, 없으면 일반)
     const postType = products.length > 0 ? 'affiliate' : 'general'
 
+    // wordpress 옵션 구성 (slug, excerpt, meta, commentStatus)
+    let wordpressData: Record<string, any> | undefined
+    if (body.wordpress && typeof body.wordpress === 'object') {
+      wordpressData = { postStatus: 'not_published' }
+      if (body.wordpress.slug) wordpressData.slug = body.wordpress.slug
+      if (body.wordpress.excerpt) wordpressData.excerpt = body.wordpress.excerpt
+      if (body.wordpress.commentStatus && ['open', 'closed'].includes(body.wordpress.commentStatus)) {
+        wordpressData.commentStatus = body.wordpress.commentStatus
+      }
+    }
+
     // 블로그 포스트 생성
     const docData = {
       userId: user.uid,
       userEmail: user.email,
       title: body.title,
       content: body.content,
+      slug: body.slug,
+      excerpt: body.excerpt,
       keywords: Array.isArray(body.keywords) ? body.keywords : [],
       products,
       postType, // 자동 설정된 타입
-      status: body.status === 'published' ? 'published' : 'draft',
+      ...(seoData && { seoAnalysis: seoData }),
+      ...(threadsData && { threads: { ...threadsData, postStatus: threadsData.postStatus || 'not_posted' } }),
+      ...(wordpressData && { wordpress: wordpressData }),
+      status: 'draft',
       createdAt: now,
       updatedAt: now,
       metadata: {
@@ -106,6 +163,8 @@ export async function POST(request: NextRequest) {
       data: {
         id: docRef.id,
         title: docData.title,
+        slug: docData.slug,
+        excerpt: docData.excerpt,
         status: docData.status,
         createdAt: now.toDate().toISOString(),
       },
@@ -171,9 +230,21 @@ export async function GET(request: NextRequest) {
           id: doc.id,
           title: data.title,
           content: data.content,
+          slug: data.slug || null,
+          excerpt: data.excerpt || null,
           keywords: data.keywords || [],
           products: data.products || [],
           status: data.status,
+          seoAnalysis: data.seoAnalysis || null,
+          threads: data.threads || null,
+          wordpress: data.wordpress ? {
+            slug: data.wordpress.slug || null,
+            excerpt: data.wordpress.excerpt || null,
+            commentStatus: data.wordpress.commentStatus || null,
+            postStatus: data.wordpress.postStatus || null,
+            wpPostId: data.wordpress.wpPostId || null,
+            wpPostUrl: data.wordpress.wpPostUrl || null,
+          } : null,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
           updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
           metadata: data.metadata || {},
@@ -184,6 +255,7 @@ export async function GET(request: NextRequest) {
     // 목록 조회
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 100)
+    const lastId = searchParams.get('lastId')
     const status = searchParams.get('status') // 'draft' | 'published' | null (all)
 
     let query = db.collection('blog_posts')
@@ -194,19 +266,33 @@ export async function GET(request: NextRequest) {
       query = query.where('status', '==', status)
     }
 
-    const snapshot = await query.limit(limit).offset((page - 1) * limit).get()
+    // 커서 기반 페이지네이션 (lastId 우선, 없으면 page 기반 하위 호환)
+    if (lastId) {
+      const lastDoc = await db.collection('blog_posts').doc(lastId).get()
+      if (lastDoc.exists) {
+        query = query.startAfter(lastDoc)
+      }
+    } else if (page > 1) {
+      query = query.offset((page - 1) * limit)
+    }
+
+    const snapshot = await query.limit(limit).get()
 
     const posts = snapshot.docs.map((doc) => {
       const data = doc.data()
       return {
         id: doc.id,
         title: data.title,
+        slug: data.slug || null,
         status: data.status,
         keywords: data.keywords || [],
+        threadsPostStatus: data.threads?.postStatus || null,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
       }
     })
+
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1]
 
     return NextResponse.json({
       success: true,
@@ -215,6 +301,8 @@ export async function GET(request: NextRequest) {
         page,
         limit,
         count: posts.length,
+        lastId: lastDoc?.id || null,
+        hasMore: snapshot.docs.length === limit,
       },
     })
   } catch (error) {
@@ -300,27 +388,68 @@ export async function PATCH(request: NextRequest) {
       updateData.postType = validProducts.length > 0 ? 'affiliate' : 'general'
     }
 
+    if (body.slug !== undefined) {
+      updateData.slug = body.slug
+    }
+
+    if (body.excerpt !== undefined) {
+      updateData.excerpt = body.excerpt
+    }
+
     if (body.status !== undefined && ['draft', 'published'].includes(body.status)) {
       updateData.status = body.status
     }
 
+    // seoAnalysis 업데이트
+    if (body.seoAnalysis !== undefined) {
+      const seoResult = SeoAnalysisSchema.safeParse(body.seoAnalysis)
+      if (!seoResult.success) {
+        return NextResponse.json(
+          { success: false, error: 'seoAnalysis 형식이 올바르지 않습니다.', details: seoResult.error.flatten() },
+          { status: 400 }
+        )
+      }
+      updateData.seoAnalysis = seoResult.data
+    }
+
+    // threads 부분 업데이트 (dot notation)
+    if (body.threads !== undefined && typeof body.threads === 'object') {
+      const threadsFields = ['text', 'hashtag', 'imageUrl', 'linkUrl', 'postStatus', 'threadsPostId', 'postedAt', 'errorMessage'] as const
+      for (const field of threadsFields) {
+        if (body.threads[field] !== undefined) {
+          updateData[`threads.${field}`] = body.threads[field]
+        }
+      }
+    }
+
+    // wordpress 부분 업데이트 (dot notation)
+    if (body.wordpress !== undefined && typeof body.wordpress === 'object') {
+      const wpFields = ['slug', 'excerpt', 'commentStatus'] as const
+      for (const field of wpFields) {
+        if (body.wordpress[field] !== undefined) {
+          updateData[`wordpress.${field}`] = body.wordpress[field]
+        }
+      }
+    }
+
     await docRef.update(updateData)
 
-    // 업데이트된 데이터 반환
-    const updatedDoc = await docRef.get()
-    const updatedData = updatedDoc.data()!
+    // 기존 데이터 + 업데이트 데이터 merge로 응답 구성 (재조회 불필요)
+    const mergedData = { ...existingData, ...updateData }
 
     return NextResponse.json({
       success: true,
       data: {
-        id: updatedDoc.id,
-        title: updatedData.title,
-        content: updatedData.content,
-        keywords: updatedData.keywords || [],
-        products: updatedData.products || [],
-        status: updatedData.status,
-        createdAt: updatedData.createdAt?.toDate?.()?.toISOString() || null,
-        updatedAt: updatedData.updatedAt?.toDate?.()?.toISOString() || null,
+        id: body.id,
+        title: mergedData.title,
+        content: mergedData.content,
+        slug: mergedData.slug || null,
+        excerpt: mergedData.excerpt || null,
+        keywords: mergedData.keywords || [],
+        products: mergedData.products || [],
+        status: mergedData.status,
+        createdAt: existingData.createdAt?.toDate?.()?.toISOString() || null,
+        updatedAt: updateData.updatedAt.toDate().toISOString(),
       },
       message: '게시글이 수정되었습니다.',
     })

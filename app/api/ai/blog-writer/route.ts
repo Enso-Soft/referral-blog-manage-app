@@ -55,9 +55,8 @@ export async function POST(request: NextRequest) {
 
     const db = getDb()
 
-    // API 키 검증 (Firestore 문서 생성 전에 먼저 확인)
-    const userDoc = await db.collection('users').doc(auth.userId).get()
-    const userApiKey = userDoc.data()?.apiKey
+    // API 키 검증 (getAuthFromRequest에서 캐싱된 데이터 사용)
+    const userApiKey = auth.apiKey
 
     if (!userApiKey) {
       return NextResponse.json(

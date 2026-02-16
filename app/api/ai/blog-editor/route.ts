@@ -46,9 +46,8 @@ export async function POST(request: NextRequest) {
       content: doc.data().content,
     })).filter(msg => msg.content && msg.role) // 빈 메시지 필터링
 
-    // 유저의 API 키 조회
-    const userDoc = await db.collection('users').doc(auth.userId).get()
-    const userApiKey = userDoc.data()?.apiKey
+    // API 키 검증 (getAuthFromRequest에서 캐싱된 데이터 사용)
+    const userApiKey = auth.apiKey
 
     if (!userApiKey) {
       return NextResponse.json({

@@ -108,7 +108,7 @@ export function useAIWriteRequests(): UseAIWriteRequestsReturn {
     )
 
     return () => unsubscribe()
-  }, [user, authLoading])
+  }, [user?.uid, authLoading])
 
   // 더 불러오기 (페이지네이션)
   const loadMore = useCallback(async () => {

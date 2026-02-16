@@ -16,11 +16,22 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const role = searchParams.get('role') || ''
     const status = searchParams.get('status') || ''
+    const perPage = Math.min(parseInt(searchParams.get('limit') || '20', 10), 50)
+    const lastId = searchParams.get('lastId') || ''
 
     const db = getDb()
-    let query = db.collection('users').orderBy('email')
+    let query: FirebaseFirestore.Query = db.collection('users').orderBy('email')
 
-    // Firestore는 복합 필터가 제한적이므로 기본 쿼리 후 메모리에서 필터링
+    // 커서 기반 페이지네이션
+    if (lastId) {
+      const lastDoc = await db.collection('users').doc(lastId).get()
+      if (lastDoc.exists) {
+        query = query.startAfter(lastDoc)
+      }
+    }
+
+    query = query.limit(perPage)
+
     const snapshot = await query.get()
 
     // 각 사용자별 postCount, productCount 병렬 조회
@@ -66,7 +77,18 @@ export async function GET(request: NextRequest) {
       users = users.filter((u) => u.status === status)
     }
 
-    return NextResponse.json({ success: true, users })
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1]
+
+    return NextResponse.json({
+      success: true,
+      users,
+      pagination: {
+        limit: perPage,
+        count: users.length,
+        lastId: lastDoc?.id || null,
+        hasMore: snapshot.docs.length === perPage,
+      },
+    })
   } catch (error) {
     console.error('GET users error:', error)
     return NextResponse.json(

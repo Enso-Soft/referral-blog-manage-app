@@ -87,7 +87,7 @@ export function usePost(postId: string | null): UsePostReturn {
       setError('데이터를 불러오는 중 오류가 발생했습니다')
       setLoading(false)
     }
-  }, [postId, user, isAdmin, authLoading])
+  }, [postId, user?.uid, isAdmin, authLoading])
 
   return { post, loading, error }
 }

@@ -2,17 +2,25 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import JSZip from 'jszip'
 import { PostViewer } from '@/components/PostViewer'
-import { CopyButton } from '@/components/CopyButton'
+import { CopyButton, RichCopyButton } from '@/components/CopyButton'
 import { AuthGuard } from '@/components/AuthGuard'
 import { Snackbar } from '@/components/Snackbar'
-import { AIChatModal, AIChatFloatingButton } from '@/components/AIChatModal'
+import { AIChatContent } from '@/components/AIChatModal'
 import { DisclaimerButtons } from '@/components/DisclaimerButtons'
+import { SeoAnalysisView } from '@/components/SeoAnalysisView'
+import { ThreadsSection } from '@/components/ThreadsSection'
+import { FloatingActionMenu, type PanelType } from '@/components/FloatingActionMenu'
+import { SlidePanel } from '@/components/SlidePanel'
+import { WordPressPanel } from '@/components/WordPressPanel'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { usePost } from '@/hooks/usePost'
 import { formatDate } from '@/lib/utils'
 import { isValidUrl, getFaviconUrl, extractImagesFromContent } from '@/lib/url-utils'
+import type { SeoAnalysis, ThreadsContent, WordPressContent } from '@/lib/schemas'
 import {
   ArrowLeft,
   Edit,
@@ -33,6 +41,10 @@ import {
   User,
   Link2,
   RotateCcw,
+  BarChart3,
+  AtSign,
+  Sparkles,
+  Globe,
 } from 'lucide-react'
 
 function PostDetail() {
@@ -43,14 +55,39 @@ function PostDetail() {
   const { post, loading, error } = usePost(postId)
   const [productsOpen, setProductsOpen] = useState(false)
   const [imagesOpen, setImagesOpen] = useState(false)
+  const [zipping, setZipping] = useState(false)
   const [statusChanging, setStatusChanging] = useState(false)
   const [snackbarMessage, setSnackbarMessage] = useState('')
   const [snackbarVisible, setSnackbarVisible] = useState(false)
   const [publishedUrl, setPublishedUrl] = useState('')
   const [publishedUrlError, setPublishedUrlError] = useState('')
   const [publishedUrlSaving, setPublishedUrlSaving] = useState(false)
-  const [isAIChatOpen, setIsAIChatOpen] = useState(false)
+  const [activePanel, setActivePanel] = useState<PanelType | null>(null)
+  const [activeTab, setActiveTab] = useState<'content' | 'seo'>('content')
   const { authFetch } = useAuthFetch()
+
+  // 패널 열림 시 wrapper padding-right로 중앙 정렬 유지하며 공간 확보 (PC만)
+  useEffect(() => {
+    const wrapper = document.querySelector('main')?.parentElement
+    if (!wrapper) return
+
+    const mq = window.matchMedia('(min-width: 768px)')
+
+    const apply = () => {
+      if (activePanel && mq.matches) {
+        wrapper.style.paddingRight = '420px'
+      } else {
+        wrapper.style.paddingRight = ''
+      }
+    }
+
+    apply()
+    mq.addEventListener('change', apply)
+    return () => {
+      mq.removeEventListener('change', apply)
+      wrapper.style.paddingRight = ''
+    }
+  }, [activePanel])
 
   // 저장 완료 후 스낵바 표시
   useEffect(() => {
@@ -63,12 +100,23 @@ function PostDetail() {
     }
   }, [searchParams, postId])
 
-  // 발행 URL 초기값 동기화
+  // 발행 URL 동기화 (Firestore 실시간 반영)
   useEffect(() => {
-    if (post?.publishedUrl) {
-      setPublishedUrl(post.publishedUrl)
-    }
+    setPublishedUrl(post?.publishedUrl || '')
   }, [post?.publishedUrl])
+
+  // WP 싱크 확인: 진입 시 WP 글이 삭제되었으면 Firestore 자동 정리
+  const wpSyncChecked = useRef(false)
+  useEffect(() => {
+    const wp = (post as unknown as { wordpress?: { wpPostId?: number; postStatus?: string } })?.wordpress
+    if (!wp?.wpPostId || wp.postStatus !== 'published' || wpSyncChecked.current) return
+    wpSyncChecked.current = true
+
+    authFetch(`/api/wordpress/publish?postId=${postId}&sync=true`)
+      .then(res => res.json())
+      .catch(() => {})
+    // onSnapshot이 Firestore 변경을 자동 반영하므로 응답 처리 불필요
+  }, [post, postId, authFetch])
 
   const handleKeywordCopy = useCallback(async (keyword: string) => {
     await navigator.clipboard.writeText(keyword)
@@ -134,18 +182,44 @@ function PostDetail() {
     window.location.href = downloadUrl
   }, [])
 
-  // 썸네일 다운로드 핸들러
-  const handleThumbnailDownload = useCallback(() => {
+  // 전체 이미지 ZIP 다운로드
+  const handleDownloadAll = useCallback(async () => {
     if (images.length === 0 || !post?.title) return
-    const thumbnailUrl = images[0]
-    // URL에서 확장자 추출
-    const urlPath = thumbnailUrl.split('?')[0]
-    const extension = urlPath.split('.').pop()?.toLowerCase() || 'jpg'
-    // 파일명에 사용할 수 없는 문자 제거
-    const safeTitle = post.title.replace(/[<>:"/\\|?*]/g, '').trim()
-    const fileName = `Thumbnail_${safeTitle}.${extension}`
-    handleDownload(thumbnailUrl, fileName)
-  }, [images, post?.title, handleDownload])
+    setZipping(true)
+    try {
+      const zip = new JSZip()
+      const results = await Promise.allSettled(
+        images.map(async (url, i) => {
+          const res = await fetch(`/api/public/download?url=${encodeURIComponent(url)}`)
+          if (!res.ok) throw new Error(`Failed: ${url}`)
+          const blob = await res.blob()
+          const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || 'jpg'
+          const name = `image_${i + 1}.${ext}`
+          zip.file(name, blob)
+        })
+      )
+      const failed = results.filter(r => r.status === 'rejected').length
+      if (failed > 0) {
+        setSnackbarMessage(`${failed}개 이미지 다운로드 실패`)
+        setSnackbarVisible(true)
+        setTimeout(() => setSnackbarVisible(false), 2000)
+      }
+      const content = await zip.generateAsync({ type: 'blob' })
+      const safeTitle = post.title.replace(/[<>:"/\\|?*]/g, '').trim()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(content)
+      a.download = `${safeTitle}.zip`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (err) {
+      console.error(err)
+      setSnackbarMessage('ZIP 다운로드에 실패했습니다')
+      setSnackbarVisible(true)
+      setTimeout(() => setSnackbarVisible(false), 2000)
+    } finally {
+      setZipping(false)
+    }
+  }, [images, post?.title])
 
   // 타입 변경 핸들러 (useCallback으로 분리)
   const handleTypeChange = useCallback(async () => {
@@ -271,8 +345,8 @@ function PostDetail() {
           목록으로
         </Link>
 
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-          <div className="flex-1 min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="flex-1 min-w-[280px]">
             <h1
               onClick={handleTitleCopy}
               className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground break-words leading-tight mb-4 cursor-pointer hover:text-blue-600 transition-colors"
@@ -381,19 +455,20 @@ function PostDetail() {
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col items-end gap-2 w-full md:w-auto">
+          <div className="flex flex-col items-end gap-2 shrink-0">
             <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
               <CopyButton content={post.content} />
+              <RichCopyButton content={post.content} />
               <Link
                 href={`/posts/${post.id}/edit`}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium whitespace-nowrap bg-background border border-border hover:bg-secondary/50 rounded-xl transition-colors shadow-sm"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium whitespace-nowrap bg-background border border-border dark:border-gray-600 hover:bg-secondary/50 rounded-xl transition-colors shadow-sm"
               >
                 <Edit className="w-4 h-4" />
                 수정
               </Link>
               <button
                 onClick={handleDelete}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium whitespace-nowrap text-destructive bg-background border border-destructive/20 hover:bg-destructive/10 rounded-xl transition-colors shadow-sm"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium whitespace-nowrap text-destructive bg-background border border-destructive/20 dark:border-red-800 hover:bg-destructive/10 rounded-xl transition-colors shadow-sm"
               >
                 <Trash2 className="w-4 h-4" />
                 삭제
@@ -486,7 +561,7 @@ function PostDetail() {
                 }`}
             >
               <div className="overflow-hidden">
-                <div className="px-4 pb-4 space-y-2">
+                <div className="px-4 pt-4 pb-4 space-y-2">
                   {post.products.map((product, i) => (
                     <div key={i} className="flex items-center justify-between bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
                       <span className="text-sm text-gray-800 dark:text-gray-200">{product.name}</span>
@@ -510,57 +585,74 @@ function PostDetail() {
         {/* Images */}
         {images.length > 0 && (
           <div className="mt-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <button
-              onClick={() => setImagesOpen(!imagesOpen)}
-              className="w-full flex items-center justify-between p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setImagesOpen(!imagesOpen)}
+                className="w-full flex items-center gap-2 p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <ChevronDown className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${imagesOpen ? 'rotate-180' : ''}`} />
                 <ImageIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">이미지 목록 ({images.length}개)</span>
-              </div>
-              {imagesOpen ? (
-                <ChevronUp className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              )}
-            </button>
+              </button>
+              <button
+                onClick={handleDownloadAll}
+                disabled={zipping}
+                className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors"
+              >
+                {zipping ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                {zipping ? '압축 중...' : '전체 다운로드'}
+              </button>
+            </div>
             <div
               className={`grid transition-all duration-300 ease-in-out ${imagesOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
                 }`}
             >
               <div className="overflow-hidden">
-                <div className="px-4 pb-4 space-y-3">
-                  {/* 썸네일 다운로드 버튼 */}
-                  <button
-                    onClick={handleThumbnailDownload}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-                  >
-                    <Download className="w-4 h-4" />
-                    썸네일 다운로드
-                  </button>
-                  {images.map((imageUrl, i) => (
-                    <div key={i} className="flex items-center gap-3 bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
-                      <img
-                        src={imageUrl}
-                        alt={`이미지 ${i + 1}`}
-                        className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
-                      />
-                      <input
-                        type="text"
-                        value={imageUrl}
-                        readOnly
-                        className="flex-1 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-1.5 rounded border border-gray-200 dark:border-gray-700 truncate"
-                        onClick={(e) => (e.target as HTMLInputElement).select()}
-                      />
-                      <button
-                        onClick={() => handleDownload(imageUrl)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-white bg-gray-700 dark:bg-gray-600 hover:bg-gray-800 dark:hover:bg-gray-500 rounded-lg flex-shrink-0"
-                      >
-                        <Download className="w-3 h-3" />
-                        다운로드
-                      </button>
-                    </div>
-                  ))}
+                <div className="px-4 pt-4 pb-4">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    {images.map((imageUrl, i) => (
+                      <div key={i} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 aspect-square bg-gray-100 dark:bg-gray-900">
+                        <img
+                          src={imageUrl}
+                          alt={`이미지 ${i + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                          <button
+                            onClick={() => {
+                              const ext = imageUrl.split('?')[0].split('.').pop()?.toLowerCase() || 'jpg'
+                              const safeTitle = (post?.title || 'image').replace(/[<>:"/\\|?*]/g, '').trim()
+                              handleDownload(imageUrl, `${safeTitle}-${i + 1}.${ext}`)
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-2.5 text-white bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30"
+                            title="다운로드"
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
+                        </div>
+                        {i === 0 && (
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-semibold text-white bg-blue-600 rounded">
+                            썸네일
+                          </span>
+                        )}
+                        <button
+                          onClick={() => {
+                            const ext = imageUrl.split('?')[0].split('.').pop()?.toLowerCase() || 'jpg'
+                            const safeTitle = (post?.title || 'image').replace(/[<>:"/\\|?*]/g, '').trim()
+                            handleDownload(imageUrl, `${safeTitle}-${i + 1}.${ext}`)
+                          }}
+                          className="absolute bottom-1 right-1 p-1.5 text-white/90 bg-black/50 rounded-md hover:bg-black/60 transition-colors sm:hidden"
+                          title="다운로드"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -568,16 +660,126 @@ function PostDetail() {
         )}
       </div>
 
-      {/* Content */}
-      <PostViewer content={post.content} />
+      {/* Tab Navigation */}
+      {(() => {
+        const hasSeo = !!(post as unknown as { seoAnalysis?: SeoAnalysis }).seoAnalysis
+        const hasThreads = !!(post as unknown as { threads?: ThreadsContent }).threads
+        const showTabs = hasSeo
 
-      {/* AI Chat */}
-      <AIChatFloatingButton onClick={() => setIsAIChatOpen(true)} />
-      <AIChatModal
-        postId={postId}
-        isOpen={isAIChatOpen}
-        onClose={() => setIsAIChatOpen(false)}
-      />
+        if (!showTabs) {
+          return <PostViewer content={post.content} />
+        }
+
+        const tabs = [
+          { id: 'content' as const, label: '콘텐츠', icon: FileText },
+          ...(hasSeo ? [{ id: 'seo' as const, label: 'SEO 분석', icon: BarChart3 }] : []),
+        ]
+
+        return (
+          <>
+            <div className="flex items-center gap-1 mb-4 border-b border-gray-200 dark:border-gray-700">
+              {tabs.map((tab) => {
+                const Icon = tab.icon
+                const isActive = activeTab === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                    {isActive && (
+                      <motion.div
+                        layoutId="tab-indicator"
+                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400"
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                {activeTab === 'content' && <PostViewer content={post.content} />}
+                {activeTab === 'seo' && hasSeo && (
+                  <SeoAnalysisView
+                    seoAnalysis={(post as unknown as { seoAnalysis: SeoAnalysis }).seoAnalysis}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </>
+        )
+      })()}
+
+      {/* Floating Menu & Slide Panels */}
+      {(() => {
+        const hasThreads = !!(post as unknown as { threads?: ThreadsContent }).threads
+        return (
+          <>
+            <FloatingActionMenu
+              onOpenPanel={(panel) => setActivePanel(panel)}
+              hasThreads={hasThreads}
+            />
+
+            <SlidePanel
+              isOpen={activePanel === 'ai-chat'}
+              onClose={() => setActivePanel(null)}
+              title="AI 콘텐츠 수정"
+              icon={<Sparkles className="w-4 h-4" />}
+            >
+              <AIChatContent postId={postId} isOpen={activePanel === 'ai-chat'} />
+            </SlidePanel>
+
+            <SlidePanel
+              isOpen={activePanel === 'wordpress'}
+              onClose={() => setActivePanel(null)}
+              title="WordPress 발행"
+              icon={<Globe className="w-4 h-4" />}
+            >
+              <WordPressPanel
+                postId={postId}
+                post={{
+                  title: post.title,
+                  content: post.content,
+                  keywords: post.keywords,
+                  updatedAt: post.updatedAt,
+                  slug: (post as unknown as { slug?: string }).slug,
+                  excerpt: (post as unknown as { excerpt?: string }).excerpt,
+                  wordpress: (post as unknown as { wordpress?: WordPressContent }).wordpress,
+                }}
+              />
+            </SlidePanel>
+
+            {hasThreads && (
+              <SlidePanel
+                isOpen={activePanel === 'threads'}
+                onClose={() => setActivePanel(null)}
+                title="Threads 발행"
+                icon={<AtSign className="w-4 h-4" />}
+              >
+                <ThreadsSection
+                  postId={postId}
+                  threads={(post as unknown as { threads: ThreadsContent }).threads}
+                />
+              </SlidePanel>
+            )}
+          </>
+        )
+      })()}
 
       {/* Snackbar */}
       <Snackbar message={snackbarMessage} visible={snackbarVisible} />

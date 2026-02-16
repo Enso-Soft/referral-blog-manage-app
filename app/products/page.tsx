@@ -10,6 +10,7 @@ interface Product {
   id: string
   name: string
   affiliateLink: string
+  finalUrl?: string
   price?: number
   brand?: string
   mall?: string

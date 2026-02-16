@@ -33,10 +33,269 @@ interface AIChatModalProps {
   onClose: () => void
 }
 
+interface AIChatContentProps {
+  postId: string
+  isOpen: boolean
+}
+
 interface ChatMessage extends Omit<ConversationMessage, 'createdAt'> {
   createdAt: Date
 }
 
+// SlidePanel 내부에서 사용하는 채팅 콘텐츠 컴포넌트
+export function AIChatContent({ postId, isOpen }: AIChatContentProps) {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadingMessages, setLoadingMessages] = useState(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const { authFetch } = useAuthFetch()
+
+  // Firestore에서 대화 이력 실시간 구독
+  useEffect(() => {
+    if (!isOpen || !postId) return
+
+    setLoadingMessages(true)
+    const db = getFirebaseDb()
+    const conversationsRef = collection(db, 'blog_posts', postId, 'conversations')
+    const q = query(conversationsRef, orderBy('createdAt', 'asc'))
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const msgs = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data()
+          let createdAt: Date
+
+          if (data.createdAt?.toDate) {
+            createdAt = data.createdAt.toDate()
+          } else if (data.createdAt?._seconds) {
+            createdAt = new Date(data.createdAt._seconds * 1000)
+          } else {
+            createdAt = new Date()
+          }
+
+          return {
+            id: docSnap.id,
+            role: data.role as 'user' | 'assistant',
+            content: data.content as string,
+            status: data.status as 'pending' | 'success' | 'failed',
+            createdAt,
+          }
+        })
+        setMessages(msgs)
+        setLoadingMessages(false)
+      },
+      (error) => {
+        console.error('Conversation subscription error:', error)
+        setLoadingMessages(false)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [isOpen, postId])
+
+  // 스크롤 to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  // 메시지 전송
+  const handleSend = useCallback(async () => {
+    const trimmedInput = input.trim()
+    if (!trimmedInput || isLoading) return
+
+    setInput('')
+    setIsLoading(true)
+
+    const db = getFirebaseDb()
+    const conversationsRef = collection(db, 'blog_posts', postId, 'conversations')
+
+    await addDoc(conversationsRef, {
+      role: 'user',
+      content: trimmedInput,
+      status: 'success',
+      createdAt: Timestamp.now(),
+    })
+
+    const aiMsgRef = await addDoc(conversationsRef, {
+      role: 'assistant',
+      content: '',
+      status: 'pending',
+      createdAt: Timestamp.now(),
+    })
+
+    try {
+      const res = await authFetch('/api/ai/blog-editor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId,
+          message: trimmedInput,
+          messageId: aiMsgRef.id,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || '요청에 실패했습니다')
+      }
+
+      await updateDoc(doc(db, 'blog_posts', postId, 'conversations', aiMsgRef.id), {
+        content: data.response || '응답을 받았습니다.',
+        status: 'success',
+      })
+    } catch (error) {
+      await updateDoc(doc(db, 'blog_posts', postId, 'conversations', aiMsgRef.id), {
+        content: error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.',
+        status: 'failed',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [input, isLoading, postId, authFetch])
+
+  // 재시도
+  const handleRetry = useCallback(async (messageId: string, originalContent: string) => {
+    if (isLoading) return
+
+    setIsLoading(true)
+    const db = getFirebaseDb()
+
+    await updateDoc(doc(db, 'blog_posts', postId, 'conversations', messageId), {
+      content: '',
+      status: 'pending',
+    })
+
+    try {
+      const res = await authFetch('/api/ai/blog-editor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId,
+          message: originalContent,
+          messageId,
+          isRetry: true,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || '재시도에 실패했습니다')
+      }
+
+      await updateDoc(doc(db, 'blog_posts', postId, 'conversations', messageId), {
+        content: data.response || '응답을 받았습니다.',
+        status: 'success',
+      })
+    } catch (error) {
+      await updateDoc(doc(db, 'blog_posts', postId, 'conversations', messageId), {
+        content: error instanceof Error ? error.message : '재시도에 실패했습니다.',
+        status: 'failed',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [isLoading, postId, authFetch])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  const findPreviousUserMessage = (messageIndex: number) => {
+    for (let i = messageIndex - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        return messages[i].content
+      }
+    }
+    return ''
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {loadingMessages ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 text-sm">
+            <Bot className="w-10 h-10 mx-auto mb-2 opacity-50" />
+            <p>AI에게 글 수정을 요청해보세요</p>
+            <p className="text-xs mt-1 text-gray-500">
+              예: &ldquo;소개 부분을 좀 더 흥미롭게 수정해줘&rdquo;
+            </p>
+          </div>
+        ) : (
+          messages.map((msg, idx) => (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              onRetry={() => handleRetry(msg.id, findPreviousUserMessage(idx))}
+              isLoading={isLoading && msg.status === 'pending'}
+            />
+          ))
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="메시지 입력..."
+            disabled={isLoading}
+            rows={1}
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl
+                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                       placeholder:text-gray-400 dark:placeholder:text-gray-500
+                       focus:ring-2 focus:ring-violet-500 focus:border-transparent
+                       resize-none disabled:opacity-50 disabled:cursor-not-allowed
+                       max-h-24 overflow-y-auto"
+            style={{ minHeight: '40px' }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={isLoading || !input.trim()}
+            className={cn(
+              'p-2.5 rounded-xl transition-all',
+              'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white',
+              'hover:from-violet-600 hover:to-fuchsia-600',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'shadow-md hover:shadow-lg'
+            )}
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+        {isLoading && (
+          <p className="text-xs text-gray-400 mt-2 text-center">
+            AI가 응답 중입니다...
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// 기존 AIChatModal (하위 호환)
 export function AIChatModal({ postId, isOpen, onClose }: AIChatModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -417,31 +676,3 @@ function MessageBubble({
   )
 }
 
-// 플로팅 버튼 컴포넌트
-export function AIChatFloatingButton({
-  onClick,
-  hasActivity,
-}: {
-  onClick: () => void
-  hasActivity?: boolean
-}) {
-  return (
-    <motion.button
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={onClick}
-      className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full
-                 bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500
-                 text-white shadow-xl hover:shadow-2xl
-                 flex items-center justify-center
-                 transition-shadow"
-    >
-      <Sparkles className="w-6 h-6" />
-
-      {/* Activity indicator */}
-      {hasActivity && (
-        <span className="absolute top-0 right-0 w-3 h-3 bg-amber-400 rounded-full animate-pulse" />
-      )}
-    </motion.button>
-  )
-}

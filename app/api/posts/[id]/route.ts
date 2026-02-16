@@ -20,6 +20,9 @@ type UpdateData = {
   products?: Array<{ name: string; affiliateLink: string }>
   publishedUrl?: string
   postType?: 'general' | 'affiliate'
+  seoAnalysis?: Record<string, unknown>
+  threads?: Record<string, unknown>
+  wordpress?: Record<string, unknown>
 } & { [key: string]: unknown }
 
 // GET: 단일 포스트 조회
@@ -117,6 +120,29 @@ export async function PATCH(
 
     if (validatedData.postType !== undefined) {
       updateData.postType = validatedData.postType
+    }
+
+    if (validatedData.seoAnalysis !== undefined) {
+      updateData.seoAnalysis = validatedData.seoAnalysis
+    }
+
+    if (validatedData.threads !== undefined) {
+      // threads 부분 업데이트 (dot notation으로 개별 필드 업데이트)
+      const threads = validatedData.threads as Record<string, unknown>
+      for (const [key, value] of Object.entries(threads)) {
+        if (value !== undefined) {
+          updateData[`threads.${key}`] = value
+        }
+      }
+    }
+
+    if (validatedData.wordpress !== undefined) {
+      const wordpress = validatedData.wordpress as Record<string, unknown>
+      for (const [key, value] of Object.entries(wordpress)) {
+        if (value !== undefined) {
+          updateData[`wordpress.${key}`] = value
+        }
+      }
     }
 
     await docRef.update(updateData)

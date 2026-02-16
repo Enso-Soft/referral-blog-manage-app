@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type RefCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // 애니메이션 설정 상수
@@ -19,12 +19,32 @@ import type { AIWriteRequest } from '@/lib/schemas/aiRequest'
 type StatusFilter = 'all' | 'draft' | 'published'
 
 function PostList() {
-  const { posts, loading, error, filter, setFilter, typeFilter, setTypeFilter, scrollPosition, setScrollPosition } = usePosts()
+  const { posts, loading, error, filter, setFilter, typeFilter, setTypeFilter, scrollPosition, setScrollPosition, loadingMore, hasMore, loadMore } = usePosts()
   const { authFetch } = useAuthFetch()
-  const { requests: aiRequests, loading: aiRequestsLoading } = useAIWriteRequests()
+  const { requests: aiRequests, loading: aiRequestsLoading, hasMore: aiHasMore, loadMore: aiLoadMore, latestCompletedRequest, clearLatestCompleted } = useAIWriteRequests()
   const [isAIModalOpen, setIsAIModalOpen] = useState(false)
   const [retryData, setRetryData] = useState<AIWriteRequest | null>(null)
   const [pendingToast, setPendingToast] = useState(false)
+
+  // 무한스크롤: callback ref로 DOM mount/unmount를 정확히 추적
+  const loadMoreRef = useRef(loadMore)
+  loadMoreRef.current = loadMore
+  const observerRef = useRef<IntersectionObserver | null>(null)
+
+  const sentinelRef: RefCallback<HTMLDivElement> = useCallback((node) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
+    }
+    if (!node) return
+    observerRef.current = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) loadMoreRef.current()
+      },
+      { rootMargin: '200px' }
+    )
+    observerRef.current.observe(node)
+  }, [])
 
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
 
@@ -33,7 +53,7 @@ function PostList() {
   }, [aiRequests, hiddenIds])
 
   // 드래프트 필터일 때는 AI 요청 섹션 숨김
-  const showAIRequestSection = filter !== 'draft' && activeAIRequests.length > 0
+  const showAIRequestSection = activeAIRequests.length > 0
 
   // AI 요청 숨김 핸들러
   const handleAIRequestDismiss = useCallback(async (requestId: string) => {
@@ -286,6 +306,13 @@ function PostList() {
             </AnimatePresence>
           </div>
         )}
+
+        {/* 무한스크롤 트리거 */}
+        {!loading && hasMore && (
+          <div ref={sentinelRef} className="flex justify-center pt-8 pb-4">
+            {loadingMore && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
+          </div>
+        )}
       </div>
 
       {/* AI Writer Modal */}
@@ -293,6 +320,12 @@ function PostList() {
         isOpen={isAIModalOpen}
         onClose={handleCloseModal}
         retryData={retryData}
+        requests={aiRequests}
+        requestsLoading={aiRequestsLoading}
+        hasMore={aiHasMore}
+        loadMore={aiLoadMore}
+        latestCompletedRequest={latestCompletedRequest}
+        clearLatestCompleted={clearLatestCompleted}
       />
 
       {/* Pending Toast */}

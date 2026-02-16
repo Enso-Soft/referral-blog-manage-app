@@ -1,11 +1,12 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
 import {
     collection,
     query,
     where,
     orderBy,
+    limit,
     onSnapshot,
     type Query,
     type DocumentData,
@@ -19,6 +20,8 @@ import type { BlogPost } from '@/lib/firestore'
 type StatusFilter = 'all' | 'draft' | 'published'
 type TypeFilter = 'all' | 'general' | 'affiliate'
 
+const PAGE_SIZE = 12
+
 interface PostsContextType {
     posts: BlogPost[]
     loading: boolean
@@ -29,6 +32,9 @@ interface PostsContextType {
     setTypeFilter: (filter: TypeFilter) => void
     scrollPosition: number
     setScrollPosition: (position: number) => void
+    loadingMore: boolean
+    hasMore: boolean
+    loadMore: () => void
 }
 
 const PostsContext = createContext<PostsContextType | undefined>(undefined)
@@ -40,12 +46,35 @@ export function PostsProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
+    // Pagination state
+    const [pageSize, setPageSize] = useState(PAGE_SIZE)
+    const [loadingMore, setLoadingMore] = useState(false)
+    const [hasMore, setHasMore] = useState(false)
+
     // Persistent state
     const [filter, setFilter] = useState<StatusFilter>('all')
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
     const [scrollPosition, setScrollPosition] = useState(0)
 
-    // Firestore 구독 (filter만 의존성으로 사용, typeFilter는 클라이언트 사이드 필터링)
+    const handleSetFilter = useCallback((newFilter: StatusFilter) => {
+        if (newFilter === filter) return
+        setFilter(newFilter)
+        setPageSize(PAGE_SIZE)
+        setRawPosts([])
+        setLoading(true)
+    }, [filter])
+
+    const handleSetTypeFilter = useCallback((newFilter: TypeFilter) => {
+        setTypeFilter(newFilter)
+    }, [])
+
+    const loadMore = useCallback(() => {
+        if (loadingMore || !hasMore) return
+        setLoadingMore(true)
+        setPageSize(prev => prev + PAGE_SIZE)
+    }, [loadingMore, hasMore])
+
+    // Firestore 구독 (filter, pageSize 의존성, typeFilter는 클라이언트 사이드 필터링)
     useEffect(() => {
         if (authLoading) return
 
@@ -56,7 +85,6 @@ export function PostsProvider({ children }: { children: ReactNode }) {
             return
         }
 
-        setLoading(true)
         setError(null)
 
         try {
@@ -73,6 +101,7 @@ export function PostsProvider({ children }: { children: ReactNode }) {
             }
 
             constraints.push(orderBy('createdAt', 'desc'))
+            constraints.push(limit(pageSize))
 
             const q = query(postsRef, ...constraints) as Query<DocumentData>
 
@@ -84,12 +113,15 @@ export function PostsProvider({ children }: { children: ReactNode }) {
                         ...doc.data(),
                     })) as BlogPost[]
                     setRawPosts(posts)
+                    setHasMore(snapshot.docs.length >= pageSize)
                     setLoading(false)
+                    setLoadingMore(false)
                 },
                 (err) => {
                     console.error('Firestore subscription error:', err)
                     setError('데이터를 불러오는 중 오류가 발생했습니다')
                     setLoading(false)
+                    setLoadingMore(false)
                 }
             )
 
@@ -98,8 +130,9 @@ export function PostsProvider({ children }: { children: ReactNode }) {
             console.error('Failed to setup subscription:', err)
             setError('데이터를 불러오는 중 오류가 발생했습니다')
             setLoading(false)
+            setLoadingMore(false)
         }
-    }, [user, isAdmin, authLoading, filter]) // typeFilter 제거 - 클라이언트 사이드 필터링
+    }, [user?.uid, isAdmin, authLoading, filter, pageSize])
 
     // Client-side filtering for postType (useMemo로 캐싱)
     const posts = useMemo(() => {
@@ -117,13 +150,16 @@ export function PostsProvider({ children }: { children: ReactNode }) {
             loading,
             error,
             filter,
-            setFilter,
+            setFilter: handleSetFilter,
             typeFilter,
-            setTypeFilter,
+            setTypeFilter: handleSetTypeFilter,
             scrollPosition,
             setScrollPosition,
+            loadingMore,
+            hasMore,
+            loadMore,
         }),
-        [posts, loading, error, filter, typeFilter, scrollPosition]
+        [posts, loading, error, filter, handleSetFilter, typeFilter, handleSetTypeFilter, scrollPosition, loadingMore, hasMore, loadMore]
     )
 
     return (

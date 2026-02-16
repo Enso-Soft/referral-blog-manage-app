@@ -4,23 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Blog Editor App - A web application for managing and editing blog content with HTML export for Tistory/Naver platforms.
+Blog Editor App - 블로그 콘텐츠를 관리하고 편집하는 웹 애플리케이션. 티스토리/네이버 플랫폼용 HTML 내보내기, AI 글 작성/편집, 제휴 제품 관리 기능을 제공한다.
 
 ## Tech Stack
 
 - **Framework**: Next.js 14 (App Router)
-- **Styling**: Tailwind CSS
-- **Editor**: Monaco (HTML code editor)
-- **Database**: Firebase Firestore (client SDK for frontend, Admin SDK for API routes)
-- **Deployment**: Amplify
+- **Styling**: Tailwind CSS, framer-motion (애니메이션)
+- **Editor**: Monaco (HTML 코드 에디터)
+- **Database**: Firebase Firestore (클라이언트 SDK + Admin SDK)
+- **Auth**: Firebase Auth (Google OAuth)
+- **State**: TanStack Query (캐싱/뮤테이션) + Firestore onSnapshot (실시간)
+- **Validation**: Zod
+- **Storage**: AWS S3 (이미지 업로드)
+- **Deployment**: AWS Amplify
 
 ## Commands
 
 ```bash
-npm run dev      # Start development server (http://localhost:3000)
-npm run build    # Production build
-npm run lint     # Run ESLint
-npm run start    # Start production server
+npm run dev      # 개발 서버 (http://localhost:3000)
+npm run build    # 프로덕션 빌드
+npm run lint     # ESLint
+npm run start    # 프로덕션 서버
 ```
 
 ### 빌드 시 주의사항
@@ -34,29 +38,77 @@ npm run start    # Start production server
 
 ## Architecture
 
-### Data Layer
-- `lib/firebase.ts` - Firebase client SDK initialization (uses `NEXT_PUBLIC_*` env vars)
-- `lib/firestore.ts` - Firestore CRUD operations and real-time subscriptions, exports `BlogPost` interface
-- API routes (`app/api/`) use Firebase Admin SDK with service account from `../properties/google-services.json`
+### Provider Hierarchy
 
-### Client-Side State
-- `hooks/usePosts.ts` - Real-time posts list subscription
-- `hooks/usePost.ts` - Single post subscription
-- Uses Firestore `onSnapshot` for live updates
+`components/Providers.tsx`에서 전역 Provider를 래핑한다. 순서가 중요:
 
-### Editor Components
-- `PostEditor.tsx` - Main editor wrapper with mode switching (HTML/Split/Preview) and Tistory compatibility warnings
-- `HtmlCodeEditor.tsx` - Monaco-based HTML editor with scroll sync
-- `TiptapEditor.tsx` - WYSIWYG editor (alternative, dynamic import)
+```
+QueryProvider (TanStack Query)
+└─ ThemeProvider (next-themes)
+   └─ ErrorBoundary
+      └─ AuthProvider (Firebase Auth 상태, 사용자 프로필, 역할)
+         └─ PostsProvider (Firestore 실시간 구독)
+```
+
+### Authentication (이중 인증 시스템)
+
+**클라이언트** (`lib/auth.ts`):
+- Firebase Auth + Google OAuth
+- Lazy 초기화 (SSR 회피)
+- `AuthProvider`가 인증 상태, 프로필, 역할 관리
+- `AuthGuard` 컴포넌트로 라우트 보호 (optional admin 요구)
+
+**서버** (`lib/auth-admin.ts`):
+- `getAuthFromRequest()` - Bearer 토큰 검증
+- `getAuthFromApiKey()` - X-API-Key 헤더 검증
+- `getAuthFromRequestOrApiKey()` - 두 가지 모두 지원 (API Key 우선)
+- `getUserRole()` / `isAdmin()` - Firestore `users` 컬렉션에서 역할 확인
+
+### Data Fetching (이중 전략)
+
+**실시간 구독** (Firestore `onSnapshot`):
+- `context/PostsProvider.tsx` - 글 목록 (필터 포함)
+- `hooks/useAIWriteRequests.ts` - AI 요청 상태 변경 감지
+
+**TanStack Query** (REST API 기반):
+- `hooks/usePostsQuery.ts` - 글 목록 (캐싱)
+- `hooks/usePostQuery.ts` - 단건 글 조회
+- `hooks/usePostMutations.ts` - CRUD 뮤테이션 (optimistic update)
+- `hooks/useAuthFetch.ts` - 인증 토큰 자동 첨부 fetch wrapper
+
+### API Route Error Handling Pattern
+
+모든 API 라우트는 `lib/api-error-handler.ts`의 표준 패턴을 따른다:
+
+```typescript
+import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
+import { getAuthFromRequest } from '@/lib/auth-admin'
+
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await getAuthFromRequest(request)
+    requireAuth(auth)        // null이면 401 throw
+    requireResource(data)    // null/undefined이면 404 throw
+    requirePermission(cond)  // false이면 403 throw
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    return handleApiError(error) // 에러 종류별 표준 JSON 응답
+  }
+}
+```
+
+커스텀 에러 클래스 (`lib/errors.ts`): `AppError` → `ApiError`, `ValidationError`, `AuthError`, `NetworkError`
 
 ### Routes (Pages)
-- `/` - Post list with status filter (draft/published)
-- `/posts/[id]` - Post detail view with HTML copy button
-- `/posts/[id]/edit` - Edit post with split-view editor
-- `/products` - 제품 목록
-- `/settings` - API 키 관리 및 API 사용법 안내
-- `/admin` - 관리자 대시보드
+
+- `/` - 글 목록 (상태 필터: draft/published)
+- `/posts/[id]` - 글 상세 (HTML 복사 버튼)
+- `/posts/[id]/edit` - 글 편집 (분할 뷰 에디터)
+- `/products` - 제품 목록 관리
+- `/settings` - API 키 관리 및 사용법 안내
+- `/admin` - 관리자 대시보드 (통계, 사용자, 콘텐츠)
 - `/auth/login` - 로그인
+- `/auth/signup` - 회원가입
 
 ### API Routes
 
@@ -68,7 +120,7 @@ app/api/
 │   ├── ai-requests/     # AI 글 작성 요청 조회/상태 업데이트/삭제 (GET/PATCH/DELETE)
 │   ├── validate-key/    # API 키 유효성 검증 (GET)
 │   ├── docs/            # API 문서 조회 (GET) - Markdown 반환
-│   └── download/        # 이미지 다운로드 프록시 (GET)
+│   └── download/        # 이미지 다운로드 프록시 (GET, 인증 불필요)
 ├── posts/               # 내부용 글 CRUD (Bearer 토큰 인증)
 │   ├── route.ts         # GET (목록)
 │   └── [id]/route.ts    # GET/PATCH/DELETE (단건)
@@ -81,46 +133,49 @@ app/api/
 │   └── blog-editor/     # AI 글 편집
 ├── auth/register/       # 회원가입
 ├── settings/api-key/    # API 키 발급/재발급
-└── upload/              # 파일 업로드
+└── upload/              # S3 이미지 업로드
 ```
 
-**내부 vs 외부 API 구분:**
-- `api/public/*` - 외부 연동용. `X-API-Key` 헤더로 인증
+**내부 vs 외부 API:**
+- `api/public/*` - 외부 연동용. `X-API-Key` 헤더 인증
 - `api/posts/*`, `api/admin/*` 등 - 프론트엔드 내부용. Firebase Bearer 토큰 인증
+
+### AI Features
+
+**AI 글 작성 플로우:**
+1. `AIWriterModal` → POST `/api/ai/blog-writer` → `ai_write_requests` 문서 생성 (status: pending)
+2. 외부 AI API가 비동기 처리 후 Firestore 직접 업데이트
+3. `useAIWriteRequests` 훅이 onSnapshot으로 완료 감지
+4. 완료 시 알림 + 생성된 글 링크
+
+**AI 채팅 편집:**
+- `AIChatModal` 컴포넌트
+- 서브컬렉션: `blog_posts/{postId}/conversations`
+- 기존 글에 대해 AI와 실시간 대화
 
 ### Firestore Collections
 
-**주요 컬렉션:**
-- `blog_posts` - 블로그 글
-- `products` - 제품 정보
-- `ai_write_requests` - AI 글 작성 요청
-
-**스키마 상세 문서:**
-- `lib/schemas/aiRequest.ts` - AI 관련 컬렉션 스키마 (서버 개발자용 주석 포함)
-- `lib/firestore.ts` - BlogPost 인터페이스
-
-```typescript
-// blog_posts 컬렉션 (간략)
-interface BlogPost {
-  userId: string
-  title: string
-  content: string      // HTML content
-  excerpt: string
-  thumbnail: string
-  keywords: string[]
-  status: 'draft' | 'published'
-  platform: 'tistory' | 'naver' | 'both'
-  createdAt: Timestamp
-  updatedAt: Timestamp
-  metadata: { originalPath?: string; wordCount: number; aiGenerated?: boolean }
-}
-```
+| 컬렉션 | 설명 | 스키마 정의 |
+|--------|------|------------|
+| `blog_posts` | 블로그 글 | `lib/firestore.ts` (BlogPost) |
+| `products` | 제휴 제품 | `lib/schemas/post.ts` |
+| `ai_write_requests` | AI 글 작성 요청 | `lib/schemas/aiRequest.ts` |
+| `users` | 사용자 프로필 + API 키 + 역할 | - |
+| `blog_posts/{id}/conversations` | AI 채팅 이력 (서브컬렉션) | - |
 
 **인덱스 설정:** `firestore.indexes.json` 참고
+
+### Image Upload
+
+1. 클라이언트 → `/api/upload` (Bearer 토큰 인증)
+2. 서버에서 리사이즈/검증 → S3 (`referral-blog-images` 버킷) 업로드
+3. S3 퍼블릭 URL 반환 → 글 HTML content에 삽입
 
 ## Environment Variables
 
 환경변수는 `.env.local` 파일 참고.
+
+서버 사이드 환경변수는 `next.config.js`의 `env` 속성에서 빌드 시 번들링된다 (FIREBASE, S3 관련).
 
 ### Amplify 배포 시 환경변수 주의사항
 
