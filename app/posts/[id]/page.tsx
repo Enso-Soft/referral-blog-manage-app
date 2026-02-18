@@ -455,8 +455,8 @@ function PostDetail() {
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col items-end gap-2 shrink-0">
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+          <div className="flex flex-col gap-2 w-full md:w-auto items-end md:shrink-0">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <CopyButton content={post.content} />
               <RichCopyButton content={post.content} />
               <Link
@@ -474,7 +474,7 @@ function PostDetail() {
                 삭제
               </button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <DisclaimerButtons content={post.content} onInsert={handleDisclaimerInsert} />
             </div>
           </div>
