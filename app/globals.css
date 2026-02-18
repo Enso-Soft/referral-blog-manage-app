@@ -88,6 +88,12 @@
   }
 }
 
+/* Prevent horizontal overflow from user-generated HTML content */
+img, video, iframe, embed, object {
+  max-width: 100%;
+  height: auto;
+}
+
 /* TipTap Editor Styles */
 .tiptap {
   @apply outline-none min-h-[300px] prose prose-slate dark:prose-invert max-w-none;

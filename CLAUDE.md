@@ -4,81 +4,81 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Blog Editor App - 블로그 콘텐츠를 관리하고 편집하는 웹 애플리케이션. 티스토리/네이버 플랫폼용 HTML 내보내기, AI 글 작성/편집, 제휴 제품 관리 기능을 제공한다.
+Blog Editor App — a web application for managing and editing blog content. Provides HTML export for Tistory/Naver platforms, WordPress publishing, Threads SNS sharing, AI-powered writing/editing, SEO analysis, and affiliate product management.
 
 ## Tech Stack
 
 - **Framework**: Next.js 14 (App Router)
-- **Styling**: Tailwind CSS, framer-motion (애니메이션)
-- **Editor**: Monaco (HTML 코드 에디터)
-- **Database**: Firebase Firestore (클라이언트 SDK + Admin SDK)
+- **Styling**: Tailwind CSS, framer-motion (animations)
+- **Editor**: Monaco (HTML code editor)
+- **Database**: Firebase Firestore (Client SDK + Admin SDK)
 - **Auth**: Firebase Auth (Google OAuth)
-- **State**: TanStack Query (캐싱/뮤테이션) + Firestore onSnapshot (실시간)
+- **State**: TanStack Query (caching/mutations) + Firestore onSnapshot (realtime)
 - **Validation**: Zod
-- **Storage**: AWS S3 (이미지 업로드)
+- **Storage**: AWS S3 (image upload)
 - **Deployment**: AWS Amplify
 
 ## Commands
 
 ```bash
-npm run dev      # 개발 서버 (http://localhost:3000)
-npm run build    # 프로덕션 빌드
+npm run dev      # Dev server (http://localhost:3000)
+npm run build    # Production build
 npm run lint     # ESLint
-npm run start    # 프로덕션 서버
+npm run start    # Production server
 ```
 
-### 빌드 시 주의사항
+### Build Caveats
 
-`npm run build`는 `.next` 폴더를 덮어쓰기 때문에 개발 서버와 충돌한다.
+`npm run build` overwrites the `.next` folder, which conflicts with the dev server.
 
-**빌드 실행 절차:**
-1. `npm run dev`가 실행 중이면 먼저 종료 (Ctrl+C)
-2. `npm run build` 실행
-3. 빌드 완료 후 `npm run dev`로 개발 서버 재시작
+**Build procedure:**
+1. Stop `npm run dev` first if running (Ctrl+C)
+2. Run `npm run build`
+3. Restart dev server with `npm run dev` after build completes
 
 ## Architecture
 
 ### Provider Hierarchy
 
-`components/Providers.tsx`에서 전역 Provider를 래핑한다. 순서가 중요:
+Global providers are wrapped in `components/Providers.tsx`. Order matters:
 
 ```
 QueryProvider (TanStack Query)
 └─ ThemeProvider (next-themes)
    └─ ErrorBoundary
-      └─ AuthProvider (Firebase Auth 상태, 사용자 프로필, 역할)
-         └─ PostsProvider (Firestore 실시간 구독)
+      └─ AuthProvider (Firebase Auth state, user profile, roles)
+         └─ PostsProvider (Firestore realtime subscription)
 ```
 
-### Authentication (이중 인증 시스템)
+### Authentication (Dual Auth System)
 
-**클라이언트** (`lib/auth.ts`):
+**Client** (`lib/auth.ts`):
 - Firebase Auth + Google OAuth
-- Lazy 초기화 (SSR 회피)
-- `AuthProvider`가 인증 상태, 프로필, 역할 관리
-- `AuthGuard` 컴포넌트로 라우트 보호 (optional admin 요구)
+- Lazy initialization (avoids SSR issues)
+- `AuthProvider` manages auth state, profile, and roles
+- `AuthGuard` component protects routes (optional admin requirement)
 
-**서버** (`lib/auth-admin.ts`):
-- `getAuthFromRequest()` - Bearer 토큰 검증
-- `getAuthFromApiKey()` - X-API-Key 헤더 검증
-- `getAuthFromRequestOrApiKey()` - 두 가지 모두 지원 (API Key 우선)
-- `getUserRole()` / `isAdmin()` - Firestore `users` 컬렉션에서 역할 확인
+**Server** (`lib/auth-admin.ts`):
+- `getAuthFromRequest()` — Bearer token verification
+- `getAuthFromApiKey()` — X-API-Key header verification
+- `getAuthFromRequestOrApiKey()` — supports both (API Key takes priority)
+- `getUserRole()` / `isAdmin()` — checks role from Firestore `users` collection
 
-### Data Fetching (이중 전략)
+### Data Fetching (Dual Strategy)
 
-**실시간 구독** (Firestore `onSnapshot`):
-- `context/PostsProvider.tsx` - 글 목록 (필터 포함)
-- `hooks/useAIWriteRequests.ts` - AI 요청 상태 변경 감지
+**Realtime subscriptions** (Firestore `onSnapshot`):
+- `context/PostsProvider.tsx` — post list (with filters)
+- `hooks/useAIWriteRequests.ts` — detects AI request status changes
 
-**TanStack Query** (REST API 기반):
-- `hooks/usePostsQuery.ts` - 글 목록 (캐싱)
-- `hooks/usePostQuery.ts` - 단건 글 조회
-- `hooks/usePostMutations.ts` - CRUD 뮤테이션 (optimistic update)
-- `hooks/useAuthFetch.ts` - 인증 토큰 자동 첨부 fetch wrapper
+**TanStack Query** (REST API-based):
+- `hooks/usePostsQuery.ts` — post list (cached)
+- `hooks/usePostQuery.ts` — single post query
+- `hooks/usePostMutations.ts` — CRUD mutations (optimistic updates)
+- `hooks/useAuthFetch.ts` — fetch wrapper with auto-attached auth token
 
 ### API Route Error Handling Pattern
 
-모든 API 라우트는 `lib/api-error-handler.ts`의 표준 패턴을 따른다:
+All API routes follow the standard pattern from `lib/api-error-handler.ts`:
 
 ```typescript
 import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
@@ -87,102 +87,182 @@ import { getAuthFromRequest } from '@/lib/auth-admin'
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthFromRequest(request)
-    requireAuth(auth)        // null이면 401 throw
-    requireResource(data)    // null/undefined이면 404 throw
-    requirePermission(cond)  // false이면 403 throw
+    requireAuth(auth)        // throws 401 if null
+    requireResource(data)    // throws 404 if null/undefined
+    requirePermission(cond)  // throws 403 if false
     return NextResponse.json({ success: true, data })
   } catch (error) {
-    return handleApiError(error) // 에러 종류별 표준 JSON 응답
+    return handleApiError(error) // standardized JSON response per error type
   }
 }
 ```
 
-커스텀 에러 클래스 (`lib/errors.ts`): `AppError` → `ApiError`, `ValidationError`, `AuthError`, `NetworkError`
+Custom error classes (`lib/errors.ts`): `AppError` → `ApiError`, `ValidationError`, `AuthError`, `NetworkError`
 
 ### Routes (Pages)
 
-- `/` - 글 목록 (상태 필터: draft/published)
-- `/posts/[id]` - 글 상세 (HTML 복사 버튼)
-- `/posts/[id]/edit` - 글 편집 (분할 뷰 에디터)
-- `/products` - 제품 목록 관리
-- `/settings` - API 키 관리 및 사용법 안내
-- `/admin` - 관리자 대시보드 (통계, 사용자, 콘텐츠)
-- `/auth/login` - 로그인
-- `/auth/signup` - 회원가입
+- `/` — Post list (status filter: draft/published)
+- `/posts/[id]` — Post detail (HTML copy button)
+- `/posts/[id]/edit` — Post editor (split-view editor)
+- `/products` — Product list management
+- `/settings` — API key management, WordPress connection, Threads connection
+- `/admin` — Admin dashboard (stats, users, content)
+- `/auth/login` — Login
+- `/auth/signup` — Sign up
 
 ### API Routes
 
 ```
 app/api/
-├── public/              # 외부 공개 API (X-API-Key 인증)
-│   ├── publish/         # 블로그 글 CRUD (POST/GET/PATCH/DELETE)
-│   ├── products/        # 제품 CRUD (POST/GET/PATCH/DELETE)
-│   ├── ai-requests/     # AI 글 작성 요청 조회/상태 업데이트/삭제 (GET/PATCH/DELETE)
-│   ├── validate-key/    # API 키 유효성 검증 (GET)
-│   ├── docs/            # API 문서 조회 (GET) - Markdown 반환
-│   └── download/        # 이미지 다운로드 프록시 (GET, 인증 불필요)
-├── posts/               # 내부용 글 CRUD (Bearer 토큰 인증)
-│   ├── route.ts         # GET (목록)
-│   └── [id]/route.ts    # GET/PATCH/DELETE (단건)
-├── admin/               # 관리자 API (Bearer 토큰 + admin role)
-│   ├── contents/        # 전체 콘텐츠 관리
-│   ├── stats/           # 통계
-│   └── users/           # 사용자 관리
-├── ai/                  # AI 기능
-│   ├── blog-writer/     # AI 글 작성
-│   └── blog-editor/     # AI 글 편집
-├── auth/register/       # 회원가입
-├── settings/api-key/    # API 키 발급/재발급
-└── upload/              # S3 이미지 업로드
+├── public/              # External API (X-API-Key auth)
+│   ├── publish/         # Blog post CRUD (POST/GET/PATCH/DELETE)
+│   ├── products/        # Product CRUD (POST/GET/PATCH/DELETE)
+│   ├── ai-requests/     # AI write request query/status update/delete (GET/PATCH/DELETE)
+│   ├── validate-key/    # API key validation (GET)
+│   ├── docs/            # API docs (GET) - returns Markdown
+│   └── download/        # Image download proxy (GET, no auth required)
+├── posts/               # Internal post CRUD (Bearer token auth)
+│   ├── route.ts         # GET (list)
+│   └── [id]/route.ts    # GET/PATCH/DELETE (single)
+├── admin/               # Admin API (Bearer token + admin role)
+│   ├── contents/        # All content management
+│   ├── stats/           # Statistics
+│   └── users/           # User management
+├── ai/                  # AI features
+│   ├── blog-writer/     # AI post writing
+│   └── blog-editor/     # AI post editing
+├── wordpress/           # WordPress integration
+│   ├── publish/         # WP post publish/update/delete/get (POST/PATCH/DELETE/GET)
+│   ├── categories/      # WP category list (GET)
+│   ├── tags/            # WP tag list/create (GET/POST)
+│   └── detect/          # WP site detection (POST)
+├── threads/
+│   └── publish/         # Threads post publish (POST)
+├── settings/
+│   ├── api-key/         # API key issue/reissue
+│   ├── wordpress/       # WP connection management (POST/GET/DELETE)
+│   └── threads-token/   # Threads OAuth token management (POST/GET/DELETE/PATCH)
+├── auth/register/       # User registration
+└── upload/              # S3 image upload
 ```
 
-**내부 vs 외부 API:**
-- `api/public/*` - 외부 연동용. `X-API-Key` 헤더 인증
-- `api/posts/*`, `api/admin/*` 등 - 프론트엔드 내부용. Firebase Bearer 토큰 인증
+**Internal vs External API:**
+- `api/public/*` — for external integrations. Authenticated via `X-API-Key` header
+- `api/posts/*`, `api/admin/*`, etc. — for frontend internal use. Authenticated via Firebase Bearer token
 
 ### AI Features
 
-**AI 글 작성 플로우:**
-1. `AIWriterModal` → POST `/api/ai/blog-writer` → `ai_write_requests` 문서 생성 (status: pending)
-2. 외부 AI API가 비동기 처리 후 Firestore 직접 업데이트
-3. `useAIWriteRequests` 훅이 onSnapshot으로 완료 감지
-4. 완료 시 알림 + 생성된 글 링크
+**AI Post Writing Flow:**
+1. `AIWriterModal` → POST `/api/ai/blog-writer` → creates `ai_write_requests` document (status: pending)
+2. External AI API processes asynchronously and updates Firestore directly
+3. `useAIWriteRequests` hook detects completion via onSnapshot
+4. On completion: notification + link to generated post
 
-**AI 채팅 편집:**
-- `AIChatModal` 컴포넌트
-- 서브컬렉션: `blog_posts/{postId}/conversations`
-- 기존 글에 대해 AI와 실시간 대화
+**AI Chat Editing:**
+- `AIChatModal` component
+- Subcollection: `blog_posts/{postId}/conversations`
+- Real-time conversation with AI about an existing post
+
+### WordPress Publishing
+
+Publish, update, and delete posts to WordPress directly from the edit page.
+
+**Architecture:**
+- `lib/wordpress-api.ts` — WordPress REST API client (publishing, image migration, category/tag management)
+- `components/WordPressPanel.tsx` — Publishing UI (inside SlidePanel)
+- Connection info stored in Firestore `users` collection (`wpSiteUrl`, `wpUsername`, `wpAppPassword`)
+
+**Publishing Flow:**
+1. Connect WordPress site on settings page (Application Password auth)
+2. Edit page → FloatingActionMenu → open WordPress panel
+3. Select categories/tags/SEO options and publish
+4. Automatic image migration: S3 URLs → WordPress Media Library
+5. Publish history recorded in `blog_posts.wordpress.publishHistory`
+
+**Key Features:**
+- Scheduled publishing (future posts), comment settings, featured image
+- Update/delete existing WP posts, sync status check
+
+### Threads Publishing
+
+Share blog post summaries to Threads SNS.
+
+**Architecture:**
+- `lib/threads-api.ts` — Threads Graph API client (profile retrieval, container creation, publishing)
+- `components/ThreadsSection.tsx` — Threads content editor UI (inside SlidePanel)
+- OAuth token stored in Firestore `users` collection (`threadsAccessToken`, `threadsTokenExpiresAt`, `threadsUserId`)
+
+**Publishing Flow:**
+1. Register Threads OAuth token on settings page (60-day expiry, refreshable)
+2. Edit page → FloatingActionMenu → open Threads panel
+3. Write body (500-char limit) + hashtags + link/image, then publish
+4. Publish status saved in `blog_posts.threads` (`not_posted` / `posted` / `failed`)
+
+### SEO Analysis
+
+Keyword research results from AI writing are saved in `blog_posts.seoAnalysis`.
+
+**Analysis Fields** (`lib/schemas/post.ts` — `SeoAnalysisSchema`):
+- Keyword candidate comparison (`keywordCandidates`) — volume, competition, CTR comparison table
+- Trend time series (`trendData`) — monthly search volume chart
+- SERP competitor analysis (`serpCompetitors`) — top search result blog analysis
+- Blog competition (`blogCompetition`) — attackability, strategy suggestions
+- Search intent (`searchIntent`) — informational/commercial/navigational intent ratios
+- Shopping data (`shoppingData`) — price range, product count (for product reviews)
+- Title options (`titleOptions`) — CTR-optimized title recommendations
+
+**Visualization:** `components/SeoAnalysisView.tsx` — renders analysis results on post detail page
 
 ### Firestore Collections
 
-| 컬렉션 | 설명 | 스키마 정의 |
-|--------|------|------------|
-| `blog_posts` | 블로그 글 | `lib/firestore.ts` (BlogPost) |
-| `products` | 제휴 제품 | `lib/schemas/post.ts` |
-| `ai_write_requests` | AI 글 작성 요청 | `lib/schemas/aiRequest.ts` |
-| `users` | 사용자 프로필 + API 키 + 역할 | - |
-| `blog_posts/{id}/conversations` | AI 채팅 이력 (서브컬렉션) | - |
+| Collection | Description | Schema Definition |
+|---|---|---|
+| `blog_posts` | Blog posts | `lib/schemas/post.ts` (BlogPost) |
+| `products` | Affiliate products | `lib/schemas/post.ts` |
+| `ai_write_requests` | AI writing requests | `lib/schemas/aiRequest.ts` |
+| `users` | User profile + API key + role + WP/Threads connection info | — |
+| `blog_posts/{id}/conversations` | AI chat history (subcollection) | — |
 
-**인덱스 설정:** `firestore.indexes.json` 참고
+**BlogPost Notable Fields:**
+- `seoAnalysis` — SEO keyword research analysis results
+- `threads` — Threads publish status/content (`ThreadsContentSchema`)
+- `wordpress` — WordPress publish status/settings/history (`WordPressContentSchema`)
+
+**users Collection Integration Fields:**
+- WordPress: `wpSiteUrl`, `wpUsername`, `wpAppPassword`, `wpDisplayName`
+- Threads: `threadsAccessToken`, `threadsTokenExpiresAt`, `threadsUserId`, `threadsUsername`
+
+**Index configuration:** see `firestore.indexes.json`
+
+### Editor Page UI Architecture
+
+UI structure of the post edit page (`/posts/[id]/edit`):
+
+- `PostEditor` — Main editor (split view: Monaco code editor + HTML preview)
+- `FloatingActionMenu` — Bottom-right FAB menu (toggles AI Chat, WordPress, Threads panels)
+- `SlidePanel` — Right slide-in panel (WordPress/Threads content)
+- `DisclaimerButtons` — Auto-insert affiliate disclaimer buttons (Naver Shopping/Coupang Partners)
+- `SeoAnalysisView` — SEO analysis result visualization
 
 ### Image Upload
 
-1. 클라이언트 → `/api/upload` (Bearer 토큰 인증)
-2. 서버에서 리사이즈/검증 → S3 (`referral-blog-images` 버킷) 업로드
-3. S3 퍼블릭 URL 반환 → 글 HTML content에 삽입
+1. Client → `/api/upload` (Bearer token auth)
+2. Server resizes/validates → uploads to S3 (`referral-blog-images` bucket)
+3. Returns S3 public URL → inserted into post HTML content
+4. On WordPress publishing, S3 images are auto-migrated to WP Media Library
 
 ## Environment Variables
 
-환경변수는 `.env.local` 파일 참고.
+See `.env.local` for environment variables.
 
-서버 사이드 환경변수는 `next.config.js`의 `env` 속성에서 빌드 시 번들링된다 (FIREBASE, S3 관련).
+Server-side env vars are bundled at build time via the `env` property in `next.config.js` (Firebase, S3 related).
 
-### Amplify 배포 시 환경변수 주의사항
+### Amplify Deployment Env Var Caveat
 
-**중요**: 새로운 서버 사이드 환경변수를 추가할 때는 반드시 두 곳에 설정해야 함:
+**Important**: When adding new server-side environment variables, you must configure them in two places:
 
-1. **Amplify Console** → Environment variables에 추가
-2. **`amplify.yml`** 파일의 build commands에 추가:
+1. **Amplify Console** → Add to Environment variables
+2. **`amplify.yml`** file build commands:
 ```yaml
 build:
   commands:
@@ -190,7 +270,7 @@ build:
     - npm run build
 ```
 
-`amplify.yml`에 추가하지 않으면 빌드 시 `.env.production`에 포함되지 않아 API Routes에서 환경변수를 읽을 수 없음.
+If not added to `amplify.yml`, the variable won't be included in `.env.production` during build, making it unreadable from API Routes.
 
 ## Path Aliases
 
@@ -198,30 +278,30 @@ build:
 
 ## External API (Public API)
 
-외부 연동용 API는 `/api/public/` 하위에 위치하며, 모든 요청에 `X-API-Key` 헤더가 필수.
+External integration APIs are located under `/api/public/`. All requests require the `X-API-Key` header.
 
-### 엔드포인트 목록
+### Endpoints
 
-| 엔드포인트 | 메서드 | 설명 |
+| Endpoint | Methods | Description |
 |---|---|---|
-| `/api/public/publish` | POST/GET/PATCH/DELETE | 블로그 글 CRUD |
-| `/api/public/products` | POST/GET/PATCH/DELETE | 제품 CRUD |
-| `/api/public/ai-requests` | GET/PATCH/DELETE | AI 글 작성 요청 조회/상태 업데이트/삭제 |
-| `/api/public/validate-key` | GET | API 키 유효성 검증 |
-| `/api/public/docs` | GET | API 문서 조회 (Markdown 형식 반환) |
-| `/api/public/download` | GET | 이미지 다운로드 프록시 (인증 불필요) |
+| `/api/public/publish` | POST/GET/PATCH/DELETE | Blog post CRUD |
+| `/api/public/products` | POST/GET/PATCH/DELETE | Product CRUD |
+| `/api/public/ai-requests` | GET/PATCH/DELETE | AI write request query/status update/delete |
+| `/api/public/validate-key` | GET | API key validation |
+| `/api/public/docs` | GET | API docs (returns Markdown) |
+| `/api/public/download` | GET | Image download proxy (no auth required) |
 
-### 인증
+### Authentication
 
 ```
 X-API-Key: YOUR_API_KEY
 ```
 
-API 키는 설정 페이지(`/settings`)에서 발급/재발급 가능.
+API keys can be issued/reissued on the settings page (`/settings`).
 
-### API 문서 조회
+### API Documentation
 
-상세 파라미터, 요청/응답 예시는 `/api/public/docs`에서 Markdown으로 조회 가능:
+Detailed parameters and request/response examples are available as Markdown from `/api/public/docs`:
 
 ```bash
 curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/public/docs
@@ -230,103 +310,103 @@ curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/public/docs?re
 curl -H "X-API-Key: YOUR_API_KEY" https://your-app.vercel.app/api/public/docs?resource=ai-requests
 ```
 
-### 문서 파일 위치
+### Documentation File Locations
 
-API 문서 원본은 `docs/api/` 디렉토리에 Markdown 파일로 관리:
-- `docs/api/publish.md` - Publish API 상세 문서
-- `docs/api/products.md` - Products API 상세 문서
-- `docs/api/ai-requests.md` - AI Requests API 상세 문서
+API documentation source files are managed as Markdown in the `docs/api/` directory:
+- `docs/api/publish.md` — Publish API detailed docs
+- `docs/api/products.md` — Products API detailed docs
+- `docs/api/ai-requests.md` — AI Requests API detailed docs
 
-## Blog HTML 작성 가이드 (다크모드 대응)
+## Blog HTML Authoring Guide (Dark Mode Support)
 
-티스토리/네이버 다크모드에서 텍스트가 보이도록 아래 규칙을 따른다.
+Follow these rules to ensure text is visible in Tistory/Naver dark mode.
 
-### 핵심 원칙
+### Core Principle
 
-| 영역 | color 지정 | 이유 |
-|------|-----------|------|
-| 배경 없는 일반 텍스트 | **지정하지 않음** | 다크모드에서 밝은 색 상속받음 |
-| 밝은 배경 박스 내부 | `color: #333 !important` | 밝은 배경 위에서 가독성 확보 |
-| 어두운 배경 박스 내부 | `color: white` 또는 `#dddddd` | 어두운 배경 위에서 가독성 확보 |
+| Area | color property | Reason |
+|------|---------------|--------|
+| Plain text (no background) | **Do not set** | Inherits light color in dark mode |
+| Inside light background box | `color: #333 !important` | Ensures readability on light background |
+| Inside dark background box | `color: white` or `#dddddd` | Ensures readability on dark background |
 
-### 밝은 배경 박스 (필수: `!important`)
+### Light Background Boxes (must use `!important`)
 
 ```html
-<!-- div에 color 지정 -->
+<!-- Set color on div -->
 <div style="background: #f8f9fa; color: #333 !important; ...">
 
-<!-- ul/ol에도 color 지정 -->
+<!-- Also set color on ul/ol -->
 <ul style="color: #333 !important; ...">
-  <li>내용</li>
+  <li>Content</li>
 </ul>
 ```
 
-밝은 배경 색상 예시: `#f8f9fa`, `#fafafa`, `#e8f5e9`, `#fff3e0`, `#e3f2fd`, `linear-gradient(135deg, #f...)`
+Light background colors: `#f8f9fa`, `#fafafa`, `#e8f5e9`, `#fff3e0`, `#e3f2fd`, `linear-gradient(135deg, #f...)`
 
-### 어두운 배경 박스
+### Dark Background Boxes
 
 ```html
 <div style="background: linear-gradient(135deg, #1a472a 0%, #2d5a3d 100%); color: white; ...">
-  <p style="color: #dddddd;">텍스트</p>
+  <p style="color: #dddddd;">Text</p>
 </div>
 ```
 
-### 일반 본문 텍스트 (배경 없음)
+### Plain Body Text (No Background)
 
 ```html
-<!-- color 지정하지 않음 -->
+<!-- Do NOT set color -->
 <p style="font-size: 17px; line-height: 1.9; margin-bottom: 20px;">
-  일반 본문 텍스트는 color를 지정하지 않는다.
+  Plain body text should not have a color property.
 </p>
 ```
 
-### 테이블
+### Tables
 
-테이블은 행별로 구분해서 처리한다:
+Handle tables on a per-row basis:
 
-| 행 타입 | 처리 |
-|---------|------|
-| 밝은 배경 행 (`#f7fafc`, `#ebf8ff` 등) | 모든 `<td>`에 `color: #333 !important` |
-| 배경 없는 행 | `color` 제거 (상속받도록) |
-| 헤더 행 (어두운 배경) | `color: white` 유지 |
+| Row Type | Treatment |
+|----------|-----------|
+| Light background row (`#f7fafc`, `#ebf8ff`, etc.) | Add `color: #333 !important` to all `<td>` |
+| No background row | Remove `color` (let it inherit) |
+| Header row (dark background) | Keep `color: white` |
 
 ```html
-<!-- 밝은 배경 행: color 필수 -->
+<!-- Light background row: color required -->
 <tr style="background: #f7fafc;">
-  <td style="padding: 14px; color: #333 !important;">항목</td>
-  <td style="padding: 14px; color: #333 !important;">내용</td>
+  <td style="padding: 14px; color: #333 !important;">Item</td>
+  <td style="padding: 14px; color: #333 !important;">Content</td>
 </tr>
 
-<!-- 배경 없는 행: color 제거 -->
+<!-- No background row: remove color -->
 <tr>
-  <td style="padding: 14px;">항목</td>
-  <td style="padding: 14px;">내용</td>
+  <td style="padding: 14px;">Item</td>
+  <td style="padding: 14px;">Content</td>
 </tr>
 
-<!-- 헤더 (어두운 배경): color white 유지 -->
+<!-- Header (dark background): keep color white -->
 <tr style="background: #4299e1; color: white;">
-  <th>제목</th>
+  <th>Title</th>
 </tr>
 ```
 
-밝은 배경 색상 목록: `#f7fafc`, `#ebf8ff`, `#f0fff4`, `#fff5f5`, `#fffaf0`
+Light background colors: `#f7fafc`, `#ebf8ff`, `#f0fff4`, `#fff5f5`, `#fffaf0`
 
-### 주의: 배경 없는 영역
+### Warning: Areas Without Background
 
-Q&A, 일반 본문 등 **배경이 없는 영역**에서는 절대 `color: #333`을 넣지 않는다.
-→ 다크모드에서 어두운 배경 + 어두운 텍스트 = 안 보임
+In Q&A sections, plain body text, or **any area without a background**, never add `color: #333`.
+→ Dark mode: dark background + dark text = invisible
 
 ```html
-<!-- 잘못된 예 -->
-<p style="color: #333; line-height: 1.9;">답변 텍스트</p>
+<!-- Wrong -->
+<p style="color: #333; line-height: 1.9;">Answer text</p>
 
-<!-- 올바른 예 -->
-<p style="line-height: 1.9;">답변 텍스트</p>
+<!-- Correct -->
+<p style="line-height: 1.9;">Answer text</p>
 ```
 
-### 체크리스트
+### Checklist
 
-- [ ] 밝은 배경 div → `color: #333 !important` 추가
-- [ ] 밝은 배경 내부 ul/ol → `color: #333 !important` 추가
-- [ ] **배경 없는 영역** → `color` 제거 (상속받도록)
-- [ ] 어두운 배경 → `color: white` 또는 밝은 색 사용
+- [ ] Light background div → add `color: #333 !important`
+- [ ] ul/ol inside light background → add `color: #333 !important`
+- [ ] **Areas without background** → remove `color` (let it inherit)
+- [ ] Dark background → use `color: white` or light colors

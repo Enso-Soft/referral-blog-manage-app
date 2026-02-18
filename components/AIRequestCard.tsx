@@ -196,7 +196,7 @@ export function AIRequestCard({
             className="flex items-center gap-1.5 mb-3"
           >
             <MessageSquareText className="w-3 h-3 flex-shrink-0 text-violet-600 dark:text-violet-400" />
-            <p className="text-xs text-violet-600 dark:text-violet-400 truncate">
+            <p className="text-xs text-violet-600 dark:text-violet-400 line-clamp-2">
               {request.progressMessage}
             </p>
           </motion.div>
