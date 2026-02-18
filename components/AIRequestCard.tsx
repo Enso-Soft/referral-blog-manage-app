@@ -531,11 +531,51 @@ function ProgressDetailModal({
   progressMessages?: Array<{ message: string; timestamp: unknown }>
 }) {
   const [mounted, setMounted] = useState(false)
+  const timelineRef = useRef<HTMLDivElement>(null)
+  const wasNearBottomRef = useRef(true)
   useEffect(() => { setMounted(true) }, [])
 
-  // Body scroll 막기
+  // 스크롤이 하단 근처인지 기록 (스크롤 이벤트 시)
+  const handleTimelineScroll = useCallback(() => {
+    const el = timelineRef.current
+    if (!el) return
+    const threshold = 60 // px 오차 허용
+    wasNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+  }, [])
+
+  // progressMessages 변경 시 하단 근처였으면 자동 스크롤
+  // spring 애니메이션(height: 0→auto) 중 scrollHeight가 계속 변하므로 두 번 시도
+  const msgCountRef = useRef(0)
   useEffect(() => {
-    if (!show) return
+    const count = progressMessages?.length ?? 0
+    const isNew = count > msgCountRef.current
+    msgCountRef.current = count
+
+    if (!show || count === 0) return
+    // 새 메시지: 하단 근처일 때만 스크롤 / 모달 오픈(!isNew): 항상 최하단
+    if (isNew && !wasNearBottomRef.current) return
+
+    // height 애니메이션 없으므로 rAF 시점에 scrollHeight가 이미 정확함
+    const raf = requestAnimationFrame(() => {
+      const el = timelineRef.current
+      if (!el) return
+      if (isNew) {
+        // 새 메시지 추가 → 부드럽게 이동
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+      } else {
+        // 모달 최초 오픈 → 즉시 최하단
+        el.scrollTop = el.scrollHeight
+      }
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [show, progressMessages?.length])
+
+  // Body scroll 막기 + 상태 초기화
+  useEffect(() => {
+    if (!show) {
+      wasNearBottomRef.current = true
+      return
+    }
     const { body, documentElement } = document
     const prevBodyOverflow = body.style.overflow
     const prevHtmlOverflow = documentElement.style.overflow
@@ -564,19 +604,16 @@ function ProgressDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            layout
-            transition={{
-              type: 'spring', stiffness: 400, damping: 30,
-              layout: { type: 'spring', stiffness: 300, damping: 30 },
-            }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-white dark:bg-gray-900
+            className="w-full max-w-md max-h-[calc(100dvh-2rem)] flex flex-col
+                       bg-white dark:bg-gray-900
                        rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700
                        overflow-hidden"
           >
             {/* Modal Header */}
             <div className={cn(
-              "flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800",
+              "flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex-shrink-0",
               request.status === 'success'
                 ? "bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-teal-500/10 dark:from-green-500/20 dark:via-emerald-500/20 dark:to-teal-500/20"
                 : "bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-fuchsia-500/10 dark:from-violet-500/20 dark:via-purple-500/20 dark:to-fuchsia-500/20"
@@ -612,12 +649,14 @@ function ProgressDetailModal({
             </div>
 
             {/* Prompt */}
-            <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">요청 프롬프트</p>
-              <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap
-                            max-h-[15rem] overflow-y-auto overscroll-contain">
-                {request.prompt}
-              </p>
+            <div className="border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+              <p className="text-xs text-gray-500 dark:text-gray-400 px-5 pt-3 pb-1">요청 프롬프트</p>
+              <div className="mr-2.5 max-h-[15rem] overflow-y-auto overscroll-contain">
+                <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap
+                              pl-5 pr-2 pb-3">
+                  {request.prompt}
+                </p>
+              </div>
             </div>
 
             {/* Attached Images */}
@@ -626,36 +665,55 @@ function ProgressDetailModal({
             )}
 
             {/* Timeline */}
-            <div className="px-5 py-4 max-h-[50vh] overflow-y-auto">
+            <div ref={timelineRef} onScroll={handleTimelineScroll} className="pl-5 pr-2 mr-2.5 py-4 flex-1 min-h-0 overflow-y-auto">
               {progressMessages && progressMessages.length > 0 ? (
-                <div className="relative">
-                  {/* Timeline line */}
-                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-violet-200 dark:bg-violet-800" />
+                <div className="space-y-4">
+                  {progressMessages.map((entry, i) => {
+                    const isLatest = i === progressMessages.length - 1
+                    const isSuccess = request.status === 'success'
+                    const lineColor = isSuccess
+                      ? 'bg-green-200 dark:bg-green-800'
+                      : 'bg-violet-200 dark:bg-violet-800'
+                    return (
+                      <motion.div
+                        key={`${i}-${entry.message}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 30, delay: 0.3 }}
+                        className="flex gap-3 relative"
+                      >
+                        {/* Connector line to next dot (마지막 항목에는 없음 → 선이 자라나는 애니메이션) */}
+                        {!isLatest && (
+                          <motion.div
+                            className={cn("absolute left-[7px] w-px", lineColor)}
+                            style={{ top: '9.5px', bottom: '-25px', transformOrigin: 'top' }}
+                            initial={{ scaleY: 0 }}
+                            animate={{ scaleY: 1 }}
+                            transition={{ type: 'spring', stiffness: 200, damping: 25, delay: 0.35 }}
+                          />
+                        )}
 
-                  <div className="space-y-4">
-                    {progressMessages.map((entry, i) => {
-                      const isLatest = i === progressMessages.length - 1
-                      return (
-                        <motion.div
-                          key={`${i}-${entry.message}`}
-                          initial={{ opacity: 0, height: 0, y: -8 }}
-                          animate={{ opacity: 1, height: 'auto', y: 0 }}
-                          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                          className="flex gap-3 relative"
-                        >
-                          {/* Dot */}
+                        {/* Dot wrapper — 외부 펄스 링 + 채워지는 애니메이션 */}
+                        <div className="relative flex-shrink-0 mt-0.5 w-[15px] h-[15px] z-10">
+                          {/* Dot 본체 — 항상 첫 번째 child (DOM 안정 → transition 동작 보장) */}
                           <div className={cn(
-                            'w-[15px] h-[15px] rounded-full border-2 flex-shrink-0 mt-0.5 z-10',
-                            isLatest && request.status === 'success'
-                              ? 'bg-green-500 border-green-500 shadow-md shadow-green-500/30'
+                            'w-full h-full rounded-full border-2 relative z-[1] transition-colors duration-500',
+                            isSuccess
+                              ? isLatest
+                                ? 'bg-green-500 border-green-500 shadow-md shadow-green-500/30'
+                                : 'bg-green-500 border-green-500'
                               : isLatest
-                                ? 'bg-violet-500 border-violet-500 shadow-md shadow-violet-500/30'
-                                : 'bg-white dark:bg-gray-900 border-violet-300 dark:border-violet-700'
-                          )}>
-                            {isLatest && request.status === 'pending' && (
-                              <div className="w-full h-full rounded-full animate-ping bg-violet-400 opacity-40" />
-                            )}
-                          </div>
+                                ? 'bg-white dark:bg-gray-900 border-violet-500 shadow-md shadow-violet-500/30'
+                                : 'bg-violet-500 border-violet-500'
+                          )} />
+                          {/* 진행중 최신: 바깥 펄스 링 (두 번째 child, 조건부 → dot index 불변) */}
+                          {isLatest && request.status === 'pending' && (
+                            <div
+                              className="absolute -inset-[2px] rounded-full bg-violet-400/25"
+                              style={{ animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite' }}
+                            />
+                          )}
+                        </div>
 
                           {/* Content */}
                           <div className="flex-1 min-w-0 pb-1">
@@ -674,17 +732,16 @@ function ProgressDetailModal({
                               </span>
                             </div>
                           </div>
-                        </motion.div>
-                      )
-                    })}
-                  </div>
+                      </motion.div>
+                    )
+                  })}
                 </div>
               ) : null}
             </div>
 
             {/* Footer */}
             <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800
-                            bg-gray-50 dark:bg-gray-800/50">
+                            bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
               {request.status === 'success' ? (
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-500 dark:text-gray-400">
