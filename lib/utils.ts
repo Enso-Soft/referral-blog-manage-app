@@ -96,29 +96,25 @@ export function debounce<T extends (...args: Parameters<T>) => void>(
 export async function resizeImageFile(
     file: File,
     maxSize: number = 1920,
-    quality: number = 0.85
+    quality: number = 0.80
 ): Promise<File> {
     return new Promise((resolve, reject) => {
         const img = new Image()
         img.onload = () => {
             let { width, height } = img
 
-            // 리사이즈 필요 없으면 원본 반환
-            if (width <= maxSize && height <= maxSize) {
-                URL.revokeObjectURL(img.src)
-                resolve(file)
-                return
+            // 비율 유지하며 축소 (maxSize 초과 시)
+            if (width > maxSize || height > maxSize) {
+                if (width > height) {
+                    height = Math.round(height * (maxSize / width))
+                    width = maxSize
+                } else {
+                    width = Math.round(width * (maxSize / height))
+                    height = maxSize
+                }
             }
 
-            // 비율 유지하며 축소
-            if (width > height) {
-                height = Math.round(height * (maxSize / width))
-                width = maxSize
-            } else {
-                width = Math.round(width * (maxSize / height))
-                height = maxSize
-            }
-
+            // 항상 canvas를 거쳐 WebP 압축 적용
             const canvas = document.createElement('canvas')
             canvas.width = width
             canvas.height = height
@@ -129,16 +125,16 @@ export async function resizeImageFile(
             canvas.toBlob(
                 (blob) => {
                     if (!blob) {
-                        reject(new Error('이미지 리사이즈 실패'))
+                        reject(new Error('이미지 압축 실패'))
                         return
                     }
-                    const resized = new File([blob], file.name, {
-                        type: 'image/jpeg',
+                    const resized = new File([blob], file.name.replace(/\.\w+$/, '.webp'), {
+                        type: 'image/webp',
                         lastModified: Date.now(),
                     })
                     resolve(resized)
                 },
-                'image/jpeg',
+                'image/webp',
                 quality
             )
         }

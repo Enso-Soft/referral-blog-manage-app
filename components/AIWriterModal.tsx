@@ -177,7 +177,7 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
         continue
       }
       try {
-        const resized = await resizeImageFile(file, 1920, 0.85)
+        const resized = await resizeImageFile(file, 1920)
         validFiles.push({
           file: resized,
           preview: URL.createObjectURL(resized),

@@ -51,6 +51,10 @@ Retrieve AI writing requests (single or list).
     },
     "status": "pending",
     "progressMessage": "Writing draft...",
+    "progressMessages": [
+      { "message": "AI가 요청을 분석하고 있어요", "timestamp": "2025-01-15T12:00:00.000Z" },
+      { "message": "Writing draft...", "timestamp": "2025-01-15T12:01:30.000Z" }
+    ],
     "resultPostId": null,
     "errorMessage": null,
     "createdAt": "2025-01-15T12:00:00.000Z",
@@ -70,6 +74,10 @@ Retrieve AI writing requests (single or list).
       "prompt": "Write a review about top 10 Olive Young cosmetics",
       "status": "pending",
       "progressMessage": "Writing draft...",
+      "progressMessages": [
+        { "message": "AI가 요청을 분석하고 있어요", "timestamp": "2025-01-15T12:00:00.000Z" },
+        { "message": "Writing draft...", "timestamp": "2025-01-15T12:01:30.000Z" }
+      ],
       "createdAt": "2025-01-15T12:00:00.000Z",
       "completedAt": null
     }

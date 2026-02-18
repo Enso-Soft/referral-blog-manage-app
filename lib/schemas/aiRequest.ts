@@ -28,8 +28,10 @@ import { TimestampSchema } from './post'
  * │ status          │ string            │ ✅   │ 'pending'|'success'|'failed'│
  * │ resultPostId    │ string | null     │ ❌   │ 생성된 블로그 글 ID         │
  * │ errorMessage    │ string | null     │ ❌   │ 실패 시 에러 메시지         │
- * │ progressMessage │ string | null     │ ❌   │ 진행 상태 메시지            │
+ * │ progressMessage │ string | null     │ ❌   │ 진행 상태 메시지 (최신 1건) │
  * │                 │                   │      │ (pending 중 세부 진행 표시) │
+ * │ progressMessages│ array             │ ❌   │ 진행 메시지 누적 배열       │
+ * │                 │                   │      │ [{message, timestamp}, ...] │
  * │ createdAt       │ Timestamp         │ ✅   │ 요청 생성 시간              │
  * │ completedAt     │ Timestamp | null  │ ❌   │ 작업 완료 시간              │
  * └─────────────────────────────────────────────────────────────────────────┘
@@ -162,8 +164,13 @@ export const AIWriteRequestSchema = z.object({
   resultPostId: z.string().optional(),
   /** 에러 메시지 (실패 시, AI 서버가 업데이트) */
   errorMessage: z.string().optional(),
-  /** 진행 상태 메시지 (pending 중 세부 진행 표시, AI 서버가 업데이트) */
+  /** 진행 상태 메시지 — 최신 1건 (pending 중 세부 진행 표시, AI 서버가 업데이트) */
   progressMessage: z.string().optional(),
+  /** 진행 상태 메시지 누적 배열 (API에서 progressMessage 업데이트 시 자동 누적, 타임스탬프 포함) */
+  progressMessages: z.array(z.object({
+    message: z.string(),
+    timestamp: TimestampSchema,
+  })).optional(),
   /** 요청 생성 시간 (웹앱에서 설정) */
   createdAt: TimestampSchema,
   /** 작업 완료 시간 (AI 서버가 업데이트) */

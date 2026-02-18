@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { v4 as uuidv4 } from 'uuid'
+import sharp from 'sharp'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth } from '@/lib/api-error-handler'
 import { CreateAIWriteRequestSchema } from '@/lib/schemas/aiRequest'
 
 const AI_API_URL = process.env.AI_API_URL || 'https://api.enso-soft.xyz/v1/ai/blog-writer'
+
+const s3Client = new S3Client({
+  region: process.env.S3_REGION || 'ap-northeast-2',
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
+  },
+})
 
 // POST: AI 블로그 작성 요청
 export async function POST(request: NextRequest) {
@@ -34,22 +45,46 @@ export async function POST(request: NextRequest) {
       options = { platform: 'tistory' }
     }
 
-    // 이미지 처리 (base64로 변환)
-    const imageDataUrls: string[] = []
+    // 이미지 처리: WebP 변환 → S3 업로드 (URL) + base64 (AI API용) — 병렬 처리
     const entries = Array.from(formData.entries())
-    for (const [key, value] of entries) {
-      if (key.startsWith('image_') && value instanceof File) {
-        const buffer = await value.arrayBuffer()
-        const base64 = Buffer.from(buffer).toString('base64')
-        const mimeType = value.type || 'image/jpeg'
-        imageDataUrls.push(`data:${mimeType};base64,${base64}`)
-      }
-    }
+    const bucket = process.env.S3_BUCKET || 'referral-blog-images'
+    const region = process.env.S3_REGION || 'ap-northeast-2'
+    const now_date = new Date()
+    const dateFolder = `${now_date.getFullYear()}/${String(now_date.getMonth() + 1).padStart(2, '0')}/${String(now_date.getDate()).padStart(2, '0')}`
+
+    const imageFiles = entries.filter(([key, value]) => key.startsWith('image_') && value instanceof File) as [string, File][]
+
+    const imageResults = await Promise.all(
+      imageFiles.map(async ([, file]) => {
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const webpBuffer = await sharp(buffer).webp({ quality: 80 }).toBuffer()
+
+        const uniqueId = uuidv4().slice(0, 8)
+        const s3Key = `ai_request/${dateFolder}/${uniqueId}.webp`
+
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: s3Key,
+            Body: webpBuffer,
+            ContentType: 'image/webp',
+          })
+        )
+
+        return {
+          url: `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`,
+          base64: `data:image/webp;base64,${webpBuffer.toString('base64')}`,
+        }
+      })
+    )
+
+    const imageUrls = imageResults.map(r => r.url)
+    const imageBase64s = imageResults.map(r => r.base64)
 
     // Zod 검증
     const validatedData = CreateAIWriteRequestSchema.parse({
       prompt: prompt.trim(),
-      images: imageDataUrls,
+      images: imageUrls,
       options,
     })
 
@@ -68,20 +103,23 @@ export async function POST(request: NextRequest) {
     const now = Timestamp.now()
 
     // Firestore에 요청 저장 (pending 상태)
+    const initialProgressMessage = 'AI가 요청을 분석하고 있어요'
     const docData = {
       userId: auth.userId,
       userEmail: auth.email,
       prompt: validatedData.prompt,
+      images: validatedData.images,
       options: validatedData.options,
       status: 'pending' as const,
-      progressMessage: 'AI가 요청을 분석하고 있어요',
+      progressMessage: initialProgressMessage,
+      progressMessages: [{ message: initialProgressMessage, timestamp: now }],
       createdAt: now,
     }
 
     const docRef = await db.collection('ai_write_requests').add(docData)
 
-    // AI API 호출 (Lambda 환경에서는 응답 반환 후 동결되므로 await 필수)
-    await callAIApi(docRef.id, validatedData, auth.userId, userApiKey)
+    // AI API 호출 (base64 이미지 전달 — 백엔드 호환)
+    await callAIApi(docRef.id, { ...validatedData, images: imageBase64s }, auth.userId, userApiKey)
 
     return NextResponse.json({
       success: true,

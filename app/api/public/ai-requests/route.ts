@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromApiKey } from '@/lib/auth-admin'
 
@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
           options: data.options,
           status: data.status,
           progressMessage: data.progressMessage || null,
+          progressMessages: (data.progressMessages || []).map((entry: { message: string; timestamp: FirebaseFirestore.Timestamp }) => ({
+            message: entry.message,
+            timestamp: entry.timestamp?.toDate?.()?.toISOString() || null,
+          })),
           resultPostId: data.resultPostId || null,
           errorMessage: data.errorMessage || null,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
@@ -88,6 +92,10 @@ export async function GET(request: NextRequest) {
         prompt: data.prompt?.substring(0, 100) || '',
         status: data.status,
         progressMessage: data.progressMessage || null,
+        progressMessages: (data.progressMessages || []).map((entry: { message: string; timestamp: FirebaseFirestore.Timestamp }) => ({
+          message: entry.message,
+          timestamp: entry.timestamp?.toDate?.()?.toISOString() || null,
+        })),
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
         completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
       }
@@ -168,6 +176,11 @@ export async function PATCH(request: NextRequest) {
 
     if (body.progressMessage !== undefined) {
       updateData.progressMessage = body.progressMessage
+      // progressMessages 배열에 타임스탬프와 함께 누적
+      updateData.progressMessages = FieldValue.arrayUnion({
+        message: body.progressMessage,
+        timestamp: Timestamp.now(),
+      })
     }
 
     if (body.resultPostId !== undefined) {
@@ -190,16 +203,24 @@ export async function PATCH(request: NextRequest) {
     // 기존 데이터 + 업데이트 데이터 merge로 응답 구성 (재조회 불필요)
     const mergedData = { ...existingData, ...updateData }
 
+    // PATCH 응답: progressMessages는 재조회 필요 (FieldValue.arrayUnion은 merge 불가)
+    const updatedDoc = await docRef.get()
+    const updatedData = updatedDoc.data()!
+
     return NextResponse.json({
       success: true,
       data: {
         id: body.id,
-        status: mergedData.status,
-        progressMessage: mergedData.progressMessage || null,
-        resultPostId: mergedData.resultPostId || null,
-        errorMessage: mergedData.errorMessage || null,
+        status: updatedData.status,
+        progressMessage: updatedData.progressMessage || null,
+        progressMessages: (updatedData.progressMessages || []).map((entry: { message: string; timestamp: FirebaseFirestore.Timestamp }) => ({
+          message: entry.message,
+          timestamp: entry.timestamp?.toDate?.()?.toISOString() || null,
+        })),
+        resultPostId: updatedData.resultPostId || null,
+        errorMessage: updatedData.errorMessage || null,
         createdAt: existingData.createdAt?.toDate?.()?.toISOString() || null,
-        completedAt: mergedData.completedAt?.toDate?.()?.toISOString() || null,
+        completedAt: updatedData.completedAt?.toDate?.()?.toISOString() || null,
       },
       message: '요청이 업데이트되었습니다.',
     })

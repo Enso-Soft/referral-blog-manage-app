@@ -24,7 +24,6 @@ function PostList() {
   const { requests: aiRequests, loading: aiRequestsLoading, hasMore: aiHasMore, loadMore: aiLoadMore, latestCompletedRequest, clearLatestCompleted } = useAIWriteRequests()
   const [isAIModalOpen, setIsAIModalOpen] = useState(false)
   const [retryData, setRetryData] = useState<AIWriteRequest | null>(null)
-  const [pendingToast, setPendingToast] = useState(false)
 
   // 무한스크롤: callback ref로 DOM mount/unmount를 정확히 추적
   const loadMoreRef = useRef(loadMore)
@@ -115,11 +114,6 @@ function PostList() {
     }
   }, [])
 
-  // 진행중 카드 클릭 시 토스트 표시
-  const handlePendingClick = useCallback(() => {
-    setPendingToast(true)
-    setTimeout(() => setPendingToast(false), 3000)
-  }, [])
 
   // 모달 닫을 때 retryData 초기화
   const handleCloseModal = useCallback(() => {
@@ -206,7 +200,6 @@ function PostList() {
                 onDelete={handleAIRequestDelete}
                 onDismiss={handleAIRequestDismiss}
                 onClick={handleAIRequestClick}
-                onPendingClick={handlePendingClick}
               />
             </motion.div>
           )}
@@ -328,22 +321,6 @@ function PostList() {
         clearLatestCompleted={clearLatestCompleted}
       />
 
-      {/* Pending Toast */}
-      <AnimatePresence>
-        {pendingToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-6 inset-x-0 z-50 flex justify-center pointer-events-none"
-          >
-            <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-violet-600 text-white shadow-lg shadow-violet-500/30 pointer-events-auto">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="font-medium">AI가 블로그 글 작성 중이에요. 기다려주세요</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }
