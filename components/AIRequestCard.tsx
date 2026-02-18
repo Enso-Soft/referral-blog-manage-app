@@ -533,6 +533,20 @@ function ProgressDetailModal({
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
+  // Body scroll 막기
+  useEffect(() => {
+    if (!show) return
+    const { body, documentElement } = document
+    const prevBodyOverflow = body.style.overflow
+    const prevHtmlOverflow = documentElement.style.overflow
+    body.style.overflow = 'hidden'
+    documentElement.style.overflow = 'hidden'
+    return () => {
+      body.style.overflow = prevBodyOverflow
+      documentElement.style.overflow = prevHtmlOverflow
+    }
+  }, [show])
+
   if (!mounted) return null
 
   return createPortal(
@@ -550,7 +564,11 @@ function ProgressDetailModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            layout
+            transition={{
+              type: 'spring', stiffness: 400, damping: 30,
+              layout: { type: 'spring', stiffness: 300, damping: 30 },
+            }}
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md bg-white dark:bg-gray-900
                        rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700
@@ -618,7 +636,13 @@ function ProgressDetailModal({
                     {progressMessages.map((entry, i) => {
                       const isLatest = i === progressMessages.length - 1
                       return (
-                        <div key={i} className="flex gap-3 relative">
+                        <motion.div
+                          key={`${i}-${entry.message}`}
+                          initial={{ opacity: 0, height: 0, y: -8 }}
+                          animate={{ opacity: 1, height: 'auto', y: 0 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                          className="flex gap-3 relative"
+                        >
                           {/* Dot */}
                           <div className={cn(
                             'w-[15px] h-[15px] rounded-full border-2 flex-shrink-0 mt-0.5 z-10',
@@ -650,7 +674,7 @@ function ProgressDetailModal({
                               </span>
                             </div>
                           </div>
-                        </div>
+                        </motion.div>
                       )
                     })}
                   </div>
