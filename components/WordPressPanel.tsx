@@ -115,8 +115,29 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
   const [seoOpen, setSeoOpen] = useState(false)
   const [slug, setSlug] = useState('')
   const [excerpt, setExcerpt] = useState('')
-  // 댓글
-  const [commentStatus, setCommentStatus] = useState<'open' | 'closed'>('open')
+  // 댓글 (localStorage 저장)
+  const [commentStatus, setCommentStatus] = useState<'open' | 'closed'>(() => {
+    if (typeof window === 'undefined') return 'open'
+    return (localStorage.getItem('wp-comment-status') as 'open' | 'closed') || 'open'
+  })
+  // 빈 줄 제거 (localStorage 저장)
+  const [removeEmptyParagraphs, setRemoveEmptyParagraphs] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('wp-remove-empty-paragraphs') === 'true'
+  })
+
+  // 댓글·빈줄 설정 변경 시 localStorage 저장
+  const handleCommentStatusToggle = useCallback(() => {
+    const next = commentStatus === 'open' ? 'closed' : 'open'
+    setCommentStatus(next)
+    localStorage.setItem('wp-comment-status', next)
+  }, [commentStatus])
+
+  const handleRemoveEmptyToggle = useCallback(() => {
+    const next = !removeEmptyParagraphs
+    setRemoveEmptyParagraphs(next)
+    localStorage.setItem('wp-remove-empty-paragraphs', String(next))
+  }, [removeEmptyParagraphs])
 
   // 이력
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -149,7 +170,7 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
     setExcerpt(wpData?.excerpt || post.excerpt || '')
     // wpData.tags (WP tag IDs)는 더 이상 사용하지 않음 — keywordTags (문자열)로 통합
     if (wpData?.categories?.length) setSelectedCategories(wpData.categories)
-    if (wpData?.commentStatus) setCommentStatus(wpData.commentStatus)
+    if (wpData?.commentStatus && !localStorage.getItem('wp-comment-status')) setCommentStatus(wpData.commentStatus)
   }, [wpData?.slug, wpData?.excerpt, post.slug, post.excerpt, wpData?.tags, wpData?.categories, wpData?.commentStatus])
 
   // WP 연결 상태 확인 + 카테고리/태그 로드
@@ -264,6 +285,7 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
         status: publishStatus,
         featuredImageUrl: featuredImageUrl || undefined,
         removeFeaturedFromContent,
+        removeEmptyParagraphs,
         categories: selectedCategories.length > 0 ? selectedCategories : undefined,
         tags: tagIds.length > 0 ? tagIds : undefined,
         slug: slug || undefined,
@@ -296,7 +318,7 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
     } finally {
       setPublishing(false)
     }
-  }, [postId, publishStatus, featuredImageUrl, removeFeaturedFromContent, selectedCategories, keywordTags, resolveKeywordTags, slug, excerpt, commentStatus, schedule, authFetch])
+  }, [postId, publishStatus, featuredImageUrl, removeFeaturedFromContent, removeEmptyParagraphs, selectedCategories, keywordTags, resolveKeywordTags, slug, excerpt, commentStatus, schedule, authFetch])
 
   const proceedPublish = useCallback(async () => {
     const existingWpPostId = wpData?.wpPostId
@@ -332,6 +354,7 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
         status: 'publish',
         featuredImageUrl: featuredImageUrl || undefined,
         removeFeaturedFromContent,
+        removeEmptyParagraphs,
         categories: selectedCategories.length > 0 ? selectedCategories : undefined,
         tags: tagIds.length > 0 ? tagIds : undefined,
         slug: slug || undefined,
@@ -353,7 +376,7 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
     } finally {
       setUpdating(false)
     }
-  }, [postId, featuredImageUrl, removeFeaturedFromContent, selectedCategories, keywordTags, resolveKeywordTags, slug, excerpt, commentStatus, authFetch])
+  }, [postId, featuredImageUrl, removeFeaturedFromContent, removeEmptyParagraphs, selectedCategories, keywordTags, resolveKeywordTags, slug, excerpt, commentStatus, authFetch])
 
   // 발행 이력 (역순)
   const publishHistory = useMemo(() => {
@@ -946,7 +969,7 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
         </div>
         <button
           type="button"
-          onClick={() => setCommentStatus(commentStatus === 'open' ? 'closed' : 'open')}
+          onClick={handleCommentStatusToggle}
           className={`relative w-10 h-5 rounded-full transition-colors ${
             commentStatus === 'open'
               ? 'bg-blue-600'
@@ -956,6 +979,31 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
           <span
             className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
               commentStatus === 'open' ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* 빈 줄(&nbsp;) 제거 */}
+      <div className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+        <div className="flex-1 mr-3">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">빈 줄 제거</span>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+            &lt;p&gt;&amp;nbsp;&lt;/p&gt; 형태의 공백 줄을 제거합니다
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleRemoveEmptyToggle}
+          className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
+            removeEmptyParagraphs
+              ? 'bg-blue-600'
+              : 'bg-gray-300 dark:bg-gray-600'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+              removeEmptyParagraphs ? 'translate-x-5' : 'translate-x-0'
             }`}
           />
         </button>

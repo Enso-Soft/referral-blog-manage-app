@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       status = 'publish',
       featuredImageUrl,
       removeFeaturedFromContent = false,
+      removeEmptyParagraphs = false,
       categories,
       tags,
       date,
@@ -157,6 +158,11 @@ export async function POST(request: NextRequest) {
     try {
       let content = postData.content || ''
       let featuredMediaId: number | undefined
+
+      // 빈 줄(&nbsp;) 제거
+      if (removeEmptyParagraphs) {
+        content = content.replace(/<p[^>]*>\s*(&nbsp;|\u00A0|\s)*\s*<\/p>/gi, '')
+      }
 
       // 이미지 마이그레이션 (항상 실행)
       const result = await migrateImagesToWP(content, conn, {
@@ -261,6 +267,7 @@ export async function PATCH(request: NextRequest) {
       status = 'publish',
       featuredImageUrl,
       removeFeaturedFromContent = false,
+      removeEmptyParagraphs = false,
       categories,
       tags,
       slug,
@@ -344,6 +351,11 @@ export async function PATCH(request: NextRequest) {
     try {
       let content = postData.content || ''
       let featuredMediaId: number | undefined
+
+      // 빈 줄(&nbsp;) 제거
+      if (removeEmptyParagraphs) {
+        content = content.replace(/<p[^>]*>\s*(&nbsp;|\u00A0|\s)*\s*<\/p>/gi, '')
+      }
 
       const result = await migrateImagesToWP(content, conn, {
         featuredImageUrl,

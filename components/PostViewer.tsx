@@ -71,7 +71,7 @@ export function PostViewer({ content }: PostViewerProps) {
         style={width && width > 0 ? { maxWidth: `${width}px`, margin: '0 auto' } : undefined}
       >
         <div
-          className="max-w-none text-gray-900 dark:text-gray-100 [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:overflow-x-auto [&_pre]:max-w-full [&_pre]:overflow-x-auto"
+          className="max-w-none text-gray-900 dark:text-gray-100 [&_ul]:list-disc [&_ol]:list-decimal [&_a]:text-blue-600 dark:[&_a]:text-blue-400 [&_a]:underline [&_h1]:text-3xl [&_h1]:font-bold [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:text-xl [&_h3]:font-bold [&_h4]:text-lg [&_h4]:font-bold [&_h5]:text-base [&_h5]:font-bold [&_h6]:text-sm [&_h6]:font-bold [&_hr]:border-gray-300 dark:[&_hr]:border-gray-600 [&_blockquote]:border-l-4 [&_blockquote]:border-gray-300 [&_blockquote]:pl-4 [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:overflow-x-auto [&_pre]:max-w-full [&_pre]:overflow-x-auto"
           dangerouslySetInnerHTML={{ __html: content }}
         />
       </div>
