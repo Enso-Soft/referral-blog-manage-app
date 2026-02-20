@@ -19,6 +19,7 @@ type UpdateData = {
   metadata?: { originalPath?: string; wordCount: number }
   products?: Array<{ name: string; affiliateLink: string }>
   publishedUrl?: string
+  publishedUrls?: string[]
   postType?: 'general' | 'affiliate'
   seoAnalysis?: Record<string, unknown>
   threads?: Record<string, unknown>
@@ -114,7 +115,12 @@ export async function PATCH(
       updateData.products = validatedData.products
     }
 
-    if (validatedData.publishedUrl !== undefined) {
+    if (validatedData.publishedUrls !== undefined) {
+      updateData.publishedUrls = validatedData.publishedUrls
+      // 하위호환: publishedUrl도 첫 번째 URL로 동기화
+      const nonEmpty = validatedData.publishedUrls.filter(u => u)
+      updateData.publishedUrl = nonEmpty.length > 0 ? nonEmpty[0] : ''
+    } else if (validatedData.publishedUrl !== undefined) {
       updateData.publishedUrl = validatedData.publishedUrl
     }
 

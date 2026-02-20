@@ -6,8 +6,8 @@ import Image from 'next/image'
 import { Clock, FileText, Tag, Send, FileEdit, Loader2, MoreVertical, Calendar, RotateCcw } from 'lucide-react'
 import type { BlogPost } from '@/lib/firestore'
 import { cn, formatDate } from '@/lib/utils'
-import { getFaviconUrl } from '@/lib/url-utils'
 import { motion } from 'framer-motion'
+import { PublishedBadge } from '@/components/PublishedBadge'
 
 interface PostCardProps {
   post: BlogPost
@@ -42,11 +42,9 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
     [post.content]
   )
 
-  // publishedUrl에서 파비콘 URL 생성 (useMemo로 캐싱)
-  const faviconUrl = useMemo(
-    () => (post.publishedUrl ? getFaviconUrl(post.publishedUrl) : null),
-    [post.publishedUrl]
-  )
+  // WordPress data for PublishedBadge
+  const wordpressData = (post as unknown as { wordpress?: Record<string, unknown> }).wordpress
+  const publishedUrls = (post as unknown as { publishedUrls?: string[] }).publishedUrls
 
   const handleStatusToggle = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -109,24 +107,18 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
 
           {/* Status Badge Overlay */}
           <div className="absolute top-3 left-3 flex gap-2">
-            <span
-              className={cn(
-                "px-2.5 py-1 text-xs font-semibold rounded-full backdrop-blur-md shadow-sm border flex items-center gap-1.5",
-                status === 'published'
-                  ? "bg-green-600 text-white border-green-700 shadow-md"
-                  : "bg-amber-500 text-white border-amber-600 shadow-md"
-              )}
-            >
-              {status === 'published' && faviconUrl && (
-                <img
-                  src={faviconUrl}
-                  alt=""
-                  className="w-4 h-4 rounded-sm"
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
-                />
-              )}
-              {status === 'published' ? '발행됨' : '초안'}
-            </span>
+            {status === 'published' ? (
+              <PublishedBadge
+                wordpress={wordpressData}
+                publishedUrls={publishedUrls}
+                publishedUrl={post.publishedUrl}
+                className="px-2.5 py-1 text-xs font-semibold rounded-full backdrop-blur-md shadow-sm border bg-green-600 text-white border-green-700 shadow-md"
+              />
+            ) : (
+              <span className="px-2.5 py-1 text-xs font-semibold rounded-full backdrop-blur-md shadow-sm border bg-amber-500 text-white border-amber-600 shadow-md">
+                초안
+              </span>
+            )}
 
             {/* Type Badge - Clickable */}
             {onTypeChange && (

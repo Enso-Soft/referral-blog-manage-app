@@ -1,9 +1,216 @@
 import { extractImagesFromContent } from '@/lib/url-utils'
+import type { WPSitePublishData, WPPublishHistoryEntry } from '@/lib/schemas'
 
-interface WPConnection {
+// --- WordPress 멀티사이트 데이터 정규화 ---
+
+export interface NormalizedWordPressData {
+  sites: Record<string, WPSitePublishData>
+  publishHistory: WPPublishHistoryEntry[]
+}
+
+/**
+ * Firestore에서 읽은 wordpress 필드를 정규화.
+ * - sites가 있으면 그대로 반환 (신규 형식)
+ * - wpPostId만 있으면 sites[wpSiteId || '__legacy__']로 변환
+ * - 둘 다 없으면 빈 객체 반환
+ */
+export function normalizeWordPressData(wp: Record<string, unknown> | undefined | null): NormalizedWordPressData {
+  if (!wp) return { sites: {}, publishHistory: [] }
+
+  const publishHistory = (wp.publishHistory || []) as WPPublishHistoryEntry[]
+
+  // 이미 신규 형식
+  if (wp.sites && typeof wp.sites === 'object') {
+    return {
+      sites: wp.sites as Record<string, WPSitePublishData>,
+      publishHistory,
+    }
+  }
+
+  // 레거시 flat 필드 → sites 맵으로 변환
+  if (wp.wpPostId) {
+    const siteId = (wp.wpSiteId as string) || '__legacy__'
+    return {
+      sites: {
+        [siteId]: {
+          postStatus: (wp.postStatus as WPSitePublishData['postStatus']) || 'not_published',
+          wpPostId: wp.wpPostId as number,
+          wpPostUrl: wp.wpPostUrl as string | undefined,
+          wpSiteUrl: wp.wpSiteUrl as string | undefined,
+          publishedAt: wp.publishedAt as WPSitePublishData['publishedAt'],
+          errorMessage: wp.errorMessage as string | undefined,
+          lastSyncedAt: wp.lastSyncedAt as WPSitePublishData['lastSyncedAt'],
+          scheduledAt: wp.scheduledAt as WPSitePublishData['scheduledAt'],
+          slug: wp.slug as string | undefined,
+          excerpt: wp.excerpt as string | undefined,
+          tags: wp.tags as number[] | undefined,
+          categories: wp.categories as number[] | undefined,
+          commentStatus: wp.commentStatus as WPSitePublishData['commentStatus'],
+        },
+      },
+      publishHistory,
+    }
+  }
+
+  return { sites: {}, publishHistory }
+}
+
+function timestampToMsHelper(ts: unknown): number {
+  if (!ts) return 0
+  if (ts instanceof Date) return ts.getTime()
+  if (typeof ts === 'object' && ts !== null) {
+    const obj = ts as Record<string, unknown>
+    if ('toDate' in obj && typeof obj.toDate === 'function') return (obj as { toDate: () => Date }).toDate().getTime()
+    if (typeof obj._seconds === 'number') return (obj._seconds as number) * 1000
+    if (typeof obj.seconds === 'number') return (obj.seconds as number) * 1000
+  }
+  return 0
+}
+
+/**
+ * 모든 사이트 중 overall WP 상태 반환.
+ * 하나라도 published/scheduled이면 'published', 아니면 'draft'
+ */
+export function getOverallWPStatus(sites: Record<string, WPSitePublishData>): 'published' | 'draft' {
+  for (const data of Object.values(sites)) {
+    if (data.postStatus === 'published' || data.postStatus === 'scheduled') {
+      return 'published'
+    }
+  }
+  return 'draft'
+}
+
+/**
+ * 가장 최근 발행된 사이트의 URL 반환
+ */
+export function getPrimaryPublishedUrl(sites: Record<string, WPSitePublishData>): string {
+  let latestMs = 0
+  let latestUrl = ''
+  for (const data of Object.values(sites)) {
+    if (data.wpPostUrl && (data.postStatus === 'published' || data.postStatus === 'scheduled')) {
+      const ms = timestampToMsHelper(data.publishedAt)
+      if (ms > latestMs) {
+        latestMs = ms
+        latestUrl = data.wpPostUrl
+      }
+    }
+  }
+  // fallback: latestMs가 0이면 첫 번째 published URL
+  if (!latestUrl) {
+    for (const data of Object.values(sites)) {
+      if (data.wpPostUrl && (data.postStatus === 'published' || data.postStatus === 'scheduled')) {
+        return data.wpPostUrl
+      }
+    }
+  }
+  return latestUrl
+}
+
+export interface WPConnection {
   siteUrl: string
   username: string
   appPassword: string
+}
+
+// --- 다중 사이트 헬퍼 ---
+
+export interface WPSiteInfo_DB {
+  siteUrl: string
+  username: string
+  appPassword: string
+  displayName?: string
+  connectedAt?: unknown
+}
+
+export interface WPSiteSummary {
+  id: string
+  siteUrl: string
+  displayName?: string
+  connectedAt?: unknown
+}
+
+/**
+ * userData에서 특정 siteId의 WPConnection을 반환.
+ * - siteId로 wpSites[siteId] 조회
+ * - siteId 없으면 레거시 flat 필드 폴백
+ * - 둘 다 없으면 wpSites 첫 번째 사이트
+ * - 못 찾으면 null
+ */
+export function getWPConnectionFromUserData(
+  userData: Record<string, unknown>,
+  siteId?: string | null
+): (WPConnection & { siteId: string; siteUrl: string }) | null {
+  const wpSites = userData.wpSites as Record<string, WPSiteInfo_DB> | undefined
+
+  // 1. siteId로 직접 조회
+  if (siteId && wpSites?.[siteId]) {
+    const site = wpSites[siteId]
+    return {
+      siteUrl: site.siteUrl,
+      username: site.username,
+      appPassword: site.appPassword,
+      siteId,
+    }
+  }
+
+  // 2. 레거시 flat 필드 폴백
+  if (userData.wpSiteUrl && userData.wpUsername && userData.wpAppPassword) {
+    return {
+      siteUrl: userData.wpSiteUrl as string,
+      username: userData.wpUsername as string,
+      appPassword: userData.wpAppPassword as string,
+      siteId: '__legacy__',
+    }
+  }
+
+  // 3. wpSites의 첫 번째 사이트
+  if (wpSites) {
+    const entries = Object.entries(wpSites)
+    if (entries.length > 0) {
+      const [firstId, firstSite] = entries[0]
+      return {
+        siteUrl: firstSite.siteUrl,
+        username: firstSite.username,
+        appPassword: firstSite.appPassword,
+        siteId: firstId,
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * userData에서 모든 WP 사이트 목록 반환 (connectedAt 정렬).
+ * 레거시 flat 필드만 있으면 id: '__legacy__'로 포함.
+ */
+export function getAllWPSitesFromUserData(
+  userData: Record<string, unknown>
+): WPSiteSummary[] {
+  const sites: WPSiteSummary[] = []
+  const wpSites = userData.wpSites as Record<string, WPSiteInfo_DB> | undefined
+
+  if (wpSites) {
+    for (const [id, site] of Object.entries(wpSites)) {
+      sites.push({
+        id,
+        siteUrl: site.siteUrl,
+        displayName: site.displayName,
+        connectedAt: site.connectedAt,
+      })
+    }
+  }
+
+  // 레거시 flat 필드 (wpSites에 이미 마이그레이션되지 않은 경우만)
+  if (sites.length === 0 && userData.wpSiteUrl && userData.wpUsername && userData.wpAppPassword) {
+    sites.push({
+      id: '__legacy__',
+      siteUrl: userData.wpSiteUrl as string,
+      displayName: (userData.wpDisplayName as string) || undefined,
+    })
+  }
+
+  return sites
 }
 
 interface WPUserInfo {

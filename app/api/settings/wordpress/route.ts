@@ -2,9 +2,38 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth } from '@/lib/api-error-handler'
-import { validateWPConnection, detectWordPress, normalizeUrl } from '@/lib/wordpress-api'
+import { validateWPConnection, detectWordPress, normalizeUrl, getAllWPSitesFromUserData } from '@/lib/wordpress-api'
 
-// POST: WordPress 연결 설정
+// Lazy migration: 레거시 flat 필드 → wpSites map으로 이전
+async function migrateIfNeeded(
+  db: FirebaseFirestore.Firestore,
+  userId: string,
+  userData: Record<string, unknown>
+): Promise<string | null> {
+  if (userData.wpSites) return null // 이미 마이그레이션됨
+  if (!userData.wpSiteUrl || !userData.wpUsername || !userData.wpAppPassword) return null
+
+  const { FieldValue } = await import('firebase-admin/firestore')
+  const siteId = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+
+  await db.collection('users').doc(userId).update({
+    [`wpSites.${siteId}`]: {
+      siteUrl: userData.wpSiteUrl,
+      username: userData.wpUsername,
+      appPassword: userData.wpAppPassword,
+      displayName: userData.wpDisplayName || userData.wpUsername,
+      connectedAt: FieldValue.serverTimestamp(),
+    },
+    wpSiteUrl: FieldValue.delete(),
+    wpUsername: FieldValue.delete(),
+    wpAppPassword: FieldValue.delete(),
+    wpDisplayName: FieldValue.delete(),
+  })
+
+  return siteId
+}
+
+// POST: WordPress 사이트 추가
 export async function POST(request: NextRequest) {
   try {
     const auth = await getAuthFromRequest(request)
@@ -18,7 +47,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // URL 정규화 (site.com, www.site.com, https://site.com 등 모두 처리)
     const normalizedUrl = normalizeUrl(siteUrl)
 
     // WordPress 사이트인지 감지
@@ -28,16 +56,32 @@ export async function POST(request: NextRequest) {
     const userInfo = await validateWPConnection({ siteUrl: normalizedUrl, username, appPassword })
 
     const db = getDb()
+    const { FieldValue } = await import('firebase-admin/firestore')
+
+    // 사용자 데이터 조회 (레거시 마이그레이션 필요 여부 확인)
+    const userDoc = await db.collection('users').doc(auth.userId).get()
+    const userData = (userDoc.data() || {}) as Record<string, unknown>
+
+    // 레거시 flat 필드 마이그레이션
+    await migrateIfNeeded(db, auth.userId, userData)
+
+    // 새 사이트 ID 생성
+    const siteId = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+
     await db.collection('users').doc(auth.userId).update({
-      wpSiteUrl: normalizedUrl,
-      wpUsername: username,
-      wpAppPassword: appPassword,
-      wpDisplayName: userInfo.name || username,
+      [`wpSites.${siteId}`]: {
+        siteUrl: normalizedUrl,
+        username,
+        appPassword,
+        displayName: userInfo.name || username,
+        connectedAt: FieldValue.serverTimestamp(),
+      },
     })
 
     return NextResponse.json({
       success: true,
       data: {
+        id: siteId,
         displayName: userInfo.name || username,
         siteUrl: normalizedUrl,
       },
@@ -54,7 +98,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET: WordPress 연결 상태 조회
+// GET: WordPress 사이트 목록 조회
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthFromRequest(request)
@@ -62,21 +106,26 @@ export async function GET(request: NextRequest) {
 
     const db = getDb()
     const userDoc = await db.collection('users').doc(auth.userId).get()
-    const userData = userDoc.data()
+    const userData = (userDoc.data() || {}) as Record<string, unknown>
 
-    if (!userData?.wpSiteUrl) {
-      return NextResponse.json({
-        success: true,
-        data: { connected: false },
-      })
+    // 레거시 flat 필드 마이그레이션
+    await migrateIfNeeded(db, auth.userId, userData)
+
+    // 마이그레이션 후 최신 데이터로 다시 읽기 (마이그레이션 발생 시)
+    let sites = getAllWPSitesFromUserData(userData)
+    if (sites.length === 0 && (userData.wpSiteUrl || userData.wpSites)) {
+      const freshDoc = await db.collection('users').doc(auth.userId).get()
+      sites = getAllWPSitesFromUserData((freshDoc.data() || {}) as Record<string, unknown>)
     }
 
     return NextResponse.json({
       success: true,
       data: {
-        connected: true,
-        siteUrl: userData.wpSiteUrl,
-        displayName: userData.wpDisplayName || userData.wpUsername || null,
+        sites: sites.map(s => ({
+          id: s.id,
+          siteUrl: s.siteUrl,
+          displayName: s.displayName || null,
+        })),
       },
     })
   } catch (error) {
@@ -84,19 +133,25 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// DELETE: WordPress 연결 해제
+// DELETE: WordPress 사이트 연결 해제
 export async function DELETE(request: NextRequest) {
   try {
     const auth = await getAuthFromRequest(request)
     requireAuth(auth)
 
+    const siteId = request.nextUrl.searchParams.get('siteId')
+    if (!siteId) {
+      return NextResponse.json(
+        { success: false, error: 'siteId 쿼리 파라미터는 필수입니다.' },
+        { status: 400 }
+      )
+    }
+
     const db = getDb()
     const { FieldValue } = await import('firebase-admin/firestore')
+
     await db.collection('users').doc(auth.userId).update({
-      wpSiteUrl: FieldValue.delete(),
-      wpUsername: FieldValue.delete(),
-      wpAppPassword: FieldValue.delete(),
-      wpDisplayName: FieldValue.delete(),
+      [`wpSites.${siteId}`]: FieldValue.delete(),
     })
 
     return NextResponse.json({

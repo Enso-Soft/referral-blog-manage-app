@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth } from '@/lib/api-error-handler'
-import { createWPPost, updateWPPost, deleteWPPost, checkWPPostExists, migrateImagesToWP } from '@/lib/wordpress-api'
+import {
+  createWPPost, updateWPPost, deleteWPPost, checkWPPostExists,
+  migrateImagesToWP, getWPConnectionFromUserData,
+  normalizeWordPressData, getOverallWPStatus, getPrimaryPublishedUrl,
+} from '@/lib/wordpress-api'
 
 // GET: 기존 WP 글 존재 여부 확인 + 싱크
 export async function GET(request: NextRequest) {
@@ -27,62 +31,91 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: '권한이 없습니다.' }, { status: 403 })
       }
 
-      const wpPostId = postData.wordpress?.wpPostId
-      if (!wpPostId) {
-        return NextResponse.json({ success: true, data: { synced: false, exists: false } })
-      }
-
       const userDoc = await db.collection('users').doc(auth.userId).get()
       const userData = userDoc.data()
-      if (!userData?.wpSiteUrl || !userData?.wpUsername || !userData?.wpAppPassword) {
+      if (!userData) {
         return NextResponse.json({ success: true, data: { synced: false, exists: false } })
       }
 
-      const conn = {
-        siteUrl: userData.wpSiteUrl,
-        username: userData.wpUsername,
-        appPassword: userData.wpAppPassword,
+      const normalized = normalizeWordPressData(postData.wordpress)
+      const publishedSiteEntries = Object.entries(normalized.sites).filter(
+        ([, d]) => d.wpPostId && (d.postStatus === 'published' || d.postStatus === 'scheduled')
+      )
+
+      if (publishedSiteEntries.length === 0) {
+        return NextResponse.json({ success: true, data: { synced: false, exists: false } })
       }
 
-      const exists = await checkWPPostExists(conn, wpPostId)
-      if (exists) {
-        return NextResponse.json({ success: true, data: { synced: false, exists: true } })
+      // 선택적: 특정 사이트만 싱크
+      const targetSiteId = request.nextUrl.searchParams.get('wpSiteId')
+      const entriesToCheck = targetSiteId
+        ? publishedSiteEntries.filter(([id]) => id === targetSiteId)
+        : publishedSiteEntries
+
+      let anySynced = false
+      const updateObj: Record<string, unknown> = {}
+
+      for (const [siteId, siteData] of entriesToCheck) {
+        const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, siteId)
+        if (!connResult || !siteData.wpPostId) continue
+
+        const exists = await checkWPPostExists(connResult, siteData.wpPostId)
+        if (!exists) {
+          // WP에서 삭제됨 → 해당 사이트 엔트리 제거
+          updateObj[`wordpress.sites.${siteId}`] = FieldValue.delete()
+          anySynced = true
+        }
       }
 
-      // WP에서 삭제됨 → Firestore 정리 (이력 보존)
-      const existingHistory = postData.wordpress?.publishHistory || []
-      await db.collection('blog_posts').doc(postId).update({
-        wordpress: {
-          postStatus: 'not_published',
-          publishHistory: existingHistory,
-        },
-        status: 'draft',
-        publishedUrl: '',
-        updatedAt: Timestamp.now(),
-      })
+      if (anySynced) {
+        updateObj['wordpress.publishHistory'] = normalized.publishHistory
+        await db.collection('blog_posts').doc(postId).update(updateObj)
 
-      return NextResponse.json({ success: true, data: { synced: true, exists: false } })
+        // 남은 사이트 기반으로 overall status 재계산
+        const remainingSites = { ...normalized.sites }
+        for (const [siteId] of entriesToCheck) {
+          if (updateObj[`wordpress.sites.${siteId}`]) {
+            delete remainingSites[siteId]
+          }
+        }
+        const overallStatus = getOverallWPStatus(remainingSites)
+        const primaryUrl = getPrimaryPublishedUrl(remainingSites)
+        const statusUpdate: Record<string, unknown> = {}
+        if (overallStatus === 'draft') {
+          statusUpdate.status = 'draft'
+          statusUpdate.publishedUrl = ''
+        } else {
+          statusUpdate.publishedUrl = primaryUrl
+        }
+        if (Object.keys(statusUpdate).length > 0) {
+          await db.collection('blog_posts').doc(postId).update(statusUpdate)
+        }
+
+        return NextResponse.json({ success: true, data: { synced: true, exists: false } })
+      }
+
+      return NextResponse.json({ success: true, data: { synced: false, exists: true } })
     }
 
     // 기존 동작: wpPostId로 존재 여부만 확인
     const wpPostId = Number(request.nextUrl.searchParams.get('wpPostId'))
+    const wpSiteId = request.nextUrl.searchParams.get('wpSiteId')
     if (!wpPostId) {
       return NextResponse.json({ success: true, data: { exists: false } })
     }
 
     const userDoc = await db.collection('users').doc(auth.userId).get()
     const userData = userDoc.data()
-    if (!userData?.wpSiteUrl || !userData?.wpUsername || !userData?.wpAppPassword) {
+    if (!userData) {
       return NextResponse.json({ success: true, data: { exists: false } })
     }
 
-    const conn = {
-      siteUrl: userData.wpSiteUrl,
-      username: userData.wpUsername,
-      appPassword: userData.wpAppPassword,
+    const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, wpSiteId)
+    if (!connResult) {
+      return NextResponse.json({ success: true, data: { exists: false } })
     }
 
-    const exists = await checkWPPostExists(conn, wpPostId)
+    const exists = await checkWPPostExists(connResult, wpPostId)
     return NextResponse.json({ success: true, data: { exists } })
   } catch (error) {
     return handleApiError(error)
@@ -97,6 +130,7 @@ export async function POST(request: NextRequest) {
 
     const {
       postId,
+      wpSiteId,
       status = 'publish',
       featuredImageUrl,
       removeFeaturedFromContent = false,
@@ -141,18 +175,22 @@ export async function POST(request: NextRequest) {
     const userDoc = await db.collection('users').doc(auth.userId).get()
     const userData = userDoc.data()
 
-    if (!userData?.wpSiteUrl || !userData?.wpUsername || !userData?.wpAppPassword) {
+    if (!userData) {
       return NextResponse.json(
         { success: false, error: 'WordPress가 연결되어 있지 않습니다. 설정에서 연결해주세요.' },
         { status: 400 }
       )
     }
 
-    const conn = {
-      siteUrl: userData.wpSiteUrl,
-      username: userData.wpUsername,
-      appPassword: userData.wpAppPassword,
+    const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, wpSiteId)
+    if (!connResult) {
+      return NextResponse.json(
+        { success: false, error: 'WordPress가 연결되어 있지 않습니다. 설정에서 연결해주세요.' },
+        { status: 400 }
+      )
     }
+
+    const conn = { siteUrl: connResult.siteUrl, username: connResult.username, appPassword: connResult.appPassword }
 
     // 3. WordPress 발행
     try {
@@ -190,41 +228,77 @@ export async function POST(request: NextRequest) {
       })
 
       // 이력 엔트리 생성
-      const existingHistory = postData.wordpress?.publishHistory || []
       const historyEntry = {
         action: isScheduled ? 'scheduled' : 'published',
         timestamp: Timestamp.now(),
         wpPostId: wpPost.id,
         wpPostUrl: wpPost.link,
+        wpSiteId: connResult.siteId,
+        wpSiteUrl: connResult.siteUrl,
         status,
       }
 
-      // Firestore 업데이트
+      // Per-site Firestore 업데이트
+      // publishHistory는 arrayUnion으로 병렬 발행 시 race condition 방지
       const wpUpdate: Record<string, unknown> = {
-        'wordpress.wpPostId': wpPost.id,
-        'wordpress.wpPostUrl': wpPost.link,
-        'wordpress.publishedAt': Timestamp.now(),
-        'wordpress.errorMessage': null,
-        'wordpress.lastSyncedAt': Timestamp.now(),
-        'wordpress.publishHistory': [...existingHistory, historyEntry],
+        [`wordpress.sites.${connResult.siteId}.wpPostId`]: wpPost.id,
+        [`wordpress.sites.${connResult.siteId}.wpPostUrl`]: wpPost.link,
+        [`wordpress.sites.${connResult.siteId}.wpSiteUrl`]: connResult.siteUrl,
+        [`wordpress.sites.${connResult.siteId}.publishedAt`]: Timestamp.now(),
+        [`wordpress.sites.${connResult.siteId}.errorMessage`]: null,
+        [`wordpress.sites.${connResult.siteId}.lastSyncedAt`]: Timestamp.now(),
+        'wordpress.publishHistory': FieldValue.arrayUnion(historyEntry),
       }
 
       if (isScheduled) {
-        wpUpdate['wordpress.postStatus'] = 'scheduled'
-        wpUpdate['wordpress.scheduledAt'] = date ? Timestamp.fromDate(new Date(date)) : Timestamp.now()
+        wpUpdate[`wordpress.sites.${connResult.siteId}.postStatus`] = 'scheduled'
+        wpUpdate[`wordpress.sites.${connResult.siteId}.scheduledAt`] = date ? Timestamp.fromDate(new Date(date)) : Timestamp.now()
       } else {
-        wpUpdate['wordpress.postStatus'] = 'published'
+        wpUpdate[`wordpress.sites.${connResult.siteId}.postStatus`] = 'published'
         wpUpdate.status = 'published'
         wpUpdate.publishedUrl = wpPost.link
       }
 
-      if (slug) wpUpdate['wordpress.slug'] = slug
-      if (excerpt) wpUpdate['wordpress.excerpt'] = excerpt
-      if (tags?.length > 0) wpUpdate['wordpress.tags'] = tags
-      if (categories?.length > 0) wpUpdate['wordpress.categories'] = categories
-      if (commentStatus) wpUpdate['wordpress.commentStatus'] = commentStatus
+      if (slug) wpUpdate[`wordpress.sites.${connResult.siteId}.slug`] = slug
+      if (excerpt) wpUpdate[`wordpress.sites.${connResult.siteId}.excerpt`] = excerpt
+      if (tags?.length > 0) wpUpdate[`wordpress.sites.${connResult.siteId}.tags`] = tags
+      if (categories?.length > 0) wpUpdate[`wordpress.sites.${connResult.siteId}.categories`] = categories
+      if (commentStatus) wpUpdate[`wordpress.sites.${connResult.siteId}.commentStatus`] = commentStatus
 
-      wpUpdate.updatedAt = Timestamp.now()
+      // Lazy migration: 기존 flat 필드가 있고 sites가 없으면 flat 필드 제거
+      if (postData.wordpress?.wpPostId && !postData.wordpress?.sites) {
+        const legacySiteId = postData.wordpress?.wpSiteId || '__legacy__'
+        // 기존 flat 데이터를 sites[legacySiteId]로 이동 (현재 발행 사이트와 다른 경우만)
+        if (legacySiteId !== connResult.siteId) {
+          wpUpdate[`wordpress.sites.${legacySiteId}.postStatus`] = postData.wordpress.postStatus || 'not_published'
+          wpUpdate[`wordpress.sites.${legacySiteId}.wpPostId`] = postData.wordpress.wpPostId
+          wpUpdate[`wordpress.sites.${legacySiteId}.wpPostUrl`] = postData.wordpress.wpPostUrl || null
+          wpUpdate[`wordpress.sites.${legacySiteId}.wpSiteUrl`] = postData.wordpress.wpSiteUrl || null
+          wpUpdate[`wordpress.sites.${legacySiteId}.publishedAt`] = postData.wordpress.publishedAt || null
+          wpUpdate[`wordpress.sites.${legacySiteId}.lastSyncedAt`] = postData.wordpress.lastSyncedAt || null
+          if (postData.wordpress.scheduledAt) wpUpdate[`wordpress.sites.${legacySiteId}.scheduledAt`] = postData.wordpress.scheduledAt
+          if (postData.wordpress.slug) wpUpdate[`wordpress.sites.${legacySiteId}.slug`] = postData.wordpress.slug
+          if (postData.wordpress.excerpt) wpUpdate[`wordpress.sites.${legacySiteId}.excerpt`] = postData.wordpress.excerpt
+          if (postData.wordpress.tags) wpUpdate[`wordpress.sites.${legacySiteId}.tags`] = postData.wordpress.tags
+          if (postData.wordpress.categories) wpUpdate[`wordpress.sites.${legacySiteId}.categories`] = postData.wordpress.categories
+          if (postData.wordpress.commentStatus) wpUpdate[`wordpress.sites.${legacySiteId}.commentStatus`] = postData.wordpress.commentStatus
+        }
+        // flat 필드 제거
+        wpUpdate['wordpress.wpPostId'] = FieldValue.delete()
+        wpUpdate['wordpress.wpPostUrl'] = FieldValue.delete()
+        wpUpdate['wordpress.wpSiteId'] = FieldValue.delete()
+        wpUpdate['wordpress.wpSiteUrl'] = FieldValue.delete()
+        wpUpdate['wordpress.postStatus'] = FieldValue.delete()
+        wpUpdate['wordpress.publishedAt'] = FieldValue.delete()
+        wpUpdate['wordpress.errorMessage'] = FieldValue.delete()
+        wpUpdate['wordpress.lastSyncedAt'] = FieldValue.delete()
+        wpUpdate['wordpress.scheduledAt'] = FieldValue.delete()
+        wpUpdate['wordpress.slug'] = FieldValue.delete()
+        wpUpdate['wordpress.excerpt'] = FieldValue.delete()
+        wpUpdate['wordpress.tags'] = FieldValue.delete()
+        wpUpdate['wordpress.categories'] = FieldValue.delete()
+        wpUpdate['wordpress.commentStatus'] = FieldValue.delete()
+      }
 
       await db.collection('blog_posts').doc(postId).update(wpUpdate)
 
@@ -238,12 +312,11 @@ export async function POST(request: NextRequest) {
         message: isScheduled ? 'WordPress에 예약 발행되었습니다.' : 'WordPress에 발행되었습니다.',
       })
     } catch (postError) {
-      // 실패: Firestore 업데이트
+      // 실패: per-site에 기록
       const errorMessage = postError instanceof Error ? postError.message : '알 수 없는 오류'
       await db.collection('blog_posts').doc(postId).update({
-        'wordpress.postStatus': 'failed',
-        'wordpress.errorMessage': errorMessage,
-        updatedAt: Timestamp.now(),
+        [`wordpress.sites.${connResult.siteId}.postStatus`]: 'failed',
+        [`wordpress.sites.${connResult.siteId}.errorMessage`]: errorMessage,
       })
 
       return NextResponse.json(
@@ -264,6 +337,7 @@ export async function PATCH(request: NextRequest) {
 
     const {
       postId,
+      wpSiteId,
       status = 'publish',
       featuredImageUrl,
       removeFeaturedFromContent = false,
@@ -302,7 +376,12 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const wpPostId = postData.wordpress?.wpPostId
+    // 2. per-site 데이터에서 wpPostId 조회
+    const normalized = normalizeWordPressData(postData.wordpress)
+    const targetSiteId = wpSiteId || postData.wordpress?.wpSiteId
+    const siteData = targetSiteId ? normalized.sites[targetSiteId] : undefined
+    const wpPostId = siteData?.wpPostId
+
     if (!wpPostId) {
       return NextResponse.json(
         { success: false, error: 'WordPress에 발행된 글이 없습니다.' },
@@ -310,44 +389,54 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // 2. 사용자 WP 연결 정보 확인
+    // 3. 사용자 WP 연결 정보 확인
     const userDoc = await db.collection('users').doc(auth.userId).get()
     const userData = userDoc.data()
 
-    if (!userData?.wpSiteUrl || !userData?.wpUsername || !userData?.wpAppPassword) {
+    if (!userData) {
       return NextResponse.json(
         { success: false, error: 'WordPress가 연결되어 있지 않습니다.' },
         { status: 400 }
       )
     }
 
-    const conn = {
-      siteUrl: userData.wpSiteUrl,
-      username: userData.wpUsername,
-      appPassword: userData.wpAppPassword,
+    const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, targetSiteId)
+    if (!connResult) {
+      return NextResponse.json(
+        { success: false, error: '이 글이 발행된 WordPress 사이트의 연결 정보를 찾을 수 없습니다. 사이트가 삭제되었을 수 있습니다.' },
+        { status: 400 }
+      )
     }
 
-    // 3. WP 글 존재 확인
+    const conn = { siteUrl: connResult.siteUrl, username: connResult.username, appPassword: connResult.appPassword }
+
+    // 4. WP 글 존재 확인
     const exists = await checkWPPostExists(conn, wpPostId)
     if (!exists) {
-      // WP에서 삭제됨 → Firestore 정리 (이력 보존)
-      const existingHistory = postData.wordpress?.publishHistory || []
-      await db.collection('blog_posts').doc(postId).update({
-        wordpress: {
-          postStatus: 'not_published',
-          publishHistory: existingHistory,
-        },
-        status: 'draft',
-        publishedUrl: '',
-        updatedAt: Timestamp.now(),
-      })
+      // WP에서 삭제됨 → 해당 사이트 엔트리 제거
+      const updateObj: Record<string, unknown> = {
+        [`wordpress.sites.${targetSiteId}`]: FieldValue.delete(),
+        'wordpress.publishHistory': normalized.publishHistory,
+      }
+      // 남은 사이트 기반으로 overall status 재계산
+      const remainingSites = { ...normalized.sites }
+      delete remainingSites[targetSiteId]
+      const overallStatus = getOverallWPStatus(remainingSites)
+      if (overallStatus === 'draft') {
+        updateObj.status = 'draft'
+        updateObj.publishedUrl = ''
+      } else {
+        updateObj.publishedUrl = getPrimaryPublishedUrl(remainingSites)
+      }
+
+      await db.collection('blog_posts').doc(postId).update(updateObj)
       return NextResponse.json(
         { success: false, error: 'WordPress 글이 더 이상 존재하지 않습니다. 상태가 초기화되었습니다.' },
         { status: 404 }
       )
     }
 
-    // 4. WordPress 업데이트
+    // 5. WordPress 업데이트
     try {
       let content = postData.content || ''
       let featuredMediaId: number | undefined
@@ -379,30 +468,30 @@ export async function PATCH(request: NextRequest) {
       })
 
       // 이력 엔트리
-      const existingHistory = postData.wordpress?.publishHistory || []
       const historyEntry = {
         action: 'updated',
         timestamp: Timestamp.now(),
         wpPostId: wpPost.id,
         wpPostUrl: wpPost.link,
+        wpSiteId: connResult.siteId,
+        wpSiteUrl: connResult.siteUrl,
         status,
       }
 
       const wpUpdate: Record<string, unknown> = {
-        'wordpress.wpPostUrl': wpPost.link,
-        'wordpress.lastSyncedAt': Timestamp.now(),
-        'wordpress.errorMessage': null,
-        'wordpress.publishHistory': [...existingHistory, historyEntry],
+        [`wordpress.sites.${targetSiteId}.wpPostUrl`]: wpPost.link,
+        [`wordpress.sites.${targetSiteId}.lastSyncedAt`]: Timestamp.now(),
+        [`wordpress.sites.${targetSiteId}.errorMessage`]: null,
+        'wordpress.publishHistory': FieldValue.arrayUnion(historyEntry),
       }
 
-      if (slug) wpUpdate['wordpress.slug'] = slug
-      if (excerpt !== undefined) wpUpdate['wordpress.excerpt'] = excerpt
-      if (tags?.length > 0) wpUpdate['wordpress.tags'] = tags
-      if (categories?.length > 0) wpUpdate['wordpress.categories'] = categories
-      if (commentStatus) wpUpdate['wordpress.commentStatus'] = commentStatus
+      if (slug) wpUpdate[`wordpress.sites.${targetSiteId}.slug`] = slug
+      if (excerpt !== undefined) wpUpdate[`wordpress.sites.${targetSiteId}.excerpt`] = excerpt
+      if (tags?.length > 0) wpUpdate[`wordpress.sites.${targetSiteId}.tags`] = tags
+      if (categories?.length > 0) wpUpdate[`wordpress.sites.${targetSiteId}.categories`] = categories
+      if (commentStatus) wpUpdate[`wordpress.sites.${targetSiteId}.commentStatus`] = commentStatus
 
       wpUpdate.publishedUrl = wpPost.link
-      wpUpdate.updatedAt = Timestamp.now()
 
       await db.collection('blog_posts').doc(postId).update(wpUpdate)
 
@@ -433,7 +522,7 @@ export async function DELETE(request: NextRequest) {
     const auth = await getAuthFromRequest(request)
     requireAuth(auth)
 
-    const { postId } = await request.json()
+    const { postId, wpSiteId } = await request.json()
     if (!postId) {
       return NextResponse.json(
         { success: false, error: 'postId 필드는 필수입니다.' },
@@ -459,7 +548,11 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const wpPostId = postData.wordpress?.wpPostId
+    const normalized = normalizeWordPressData(postData.wordpress)
+    const targetSiteId = wpSiteId || postData.wordpress?.wpSiteId
+    const siteData = targetSiteId ? normalized.sites[targetSiteId] : undefined
+    const wpPostId = siteData?.wpPostId
+
     if (!wpPostId) {
       return NextResponse.json(
         { success: false, error: 'WordPress에 발행된 글이 없습니다.' },
@@ -469,42 +562,63 @@ export async function DELETE(request: NextRequest) {
 
     const userDoc = await db.collection('users').doc(auth.userId).get()
     const userData = userDoc.data()
-    if (!userData?.wpSiteUrl || !userData?.wpUsername || !userData?.wpAppPassword) {
-      return NextResponse.json(
-        { success: false, error: 'WordPress가 연결되어 있지 않습니다.' },
-        { status: 400 }
-      )
+
+    if (userData) {
+      const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, targetSiteId)
+      if (connResult) {
+        const conn = { siteUrl: connResult.siteUrl, username: connResult.username, appPassword: connResult.appPassword }
+        try {
+          await deleteWPPost(conn, wpPostId)
+        } catch {
+          // WP에서 이미 삭제된 경우(404) 무시 — Firestore 정리는 계속 진행
+        }
+      }
     }
 
-    const conn = {
-      siteUrl: userData.wpSiteUrl,
-      username: userData.wpUsername,
-      appPassword: userData.wpAppPassword,
-    }
-
-    try {
-      await deleteWPPost(conn, wpPostId)
-    } catch {
-      // WP에서 이미 삭제된 경우(404) 무시 — Firestore 정리는 계속 진행
-    }
-
-    // Firestore 정리 (이력 보존)
-    const existingHistory = postData.wordpress?.publishHistory || []
+    // 해당 사이트 엔트리만 삭제 + 이력 보존
     const historyEntry = {
       action: 'deleted',
       timestamp: Timestamp.now(),
       wpPostId,
+      wpSiteId: targetSiteId,
+      wpSiteUrl: siteData?.wpSiteUrl || null,
     }
 
-    await db.collection('blog_posts').doc(postId).update({
-      wordpress: {
-        postStatus: 'not_published',
-        publishHistory: [...existingHistory, historyEntry],
-      },
-      status: 'draft',
-      publishedUrl: '',
-      updatedAt: Timestamp.now(),
-    })
+    const updateObj: Record<string, unknown> = {
+      [`wordpress.sites.${targetSiteId}`]: FieldValue.delete(),
+      'wordpress.publishHistory': FieldValue.arrayUnion(historyEntry),
+    }
+
+    // Lazy migration: flat 필드가 남아있으면 제거
+    if (postData.wordpress?.wpPostId && !postData.wordpress?.sites) {
+      updateObj['wordpress.wpPostId'] = FieldValue.delete()
+      updateObj['wordpress.wpPostUrl'] = FieldValue.delete()
+      updateObj['wordpress.wpSiteId'] = FieldValue.delete()
+      updateObj['wordpress.wpSiteUrl'] = FieldValue.delete()
+      updateObj['wordpress.postStatus'] = FieldValue.delete()
+      updateObj['wordpress.publishedAt'] = FieldValue.delete()
+      updateObj['wordpress.errorMessage'] = FieldValue.delete()
+      updateObj['wordpress.lastSyncedAt'] = FieldValue.delete()
+      updateObj['wordpress.scheduledAt'] = FieldValue.delete()
+      updateObj['wordpress.slug'] = FieldValue.delete()
+      updateObj['wordpress.excerpt'] = FieldValue.delete()
+      updateObj['wordpress.tags'] = FieldValue.delete()
+      updateObj['wordpress.categories'] = FieldValue.delete()
+      updateObj['wordpress.commentStatus'] = FieldValue.delete()
+    }
+
+    // 남은 사이트 기반으로 overall status 재계산
+    const remainingSites = { ...normalized.sites }
+    delete remainingSites[targetSiteId]
+    const overallStatus = getOverallWPStatus(remainingSites)
+    if (overallStatus === 'draft') {
+      updateObj.status = 'draft'
+      updateObj.publishedUrl = ''
+    } else {
+      updateObj.publishedUrl = getPrimaryPublishedUrl(remainingSites)
+    }
+
+    await db.collection('blog_posts').doc(postId).update(updateObj)
 
     return NextResponse.json({
       success: true,

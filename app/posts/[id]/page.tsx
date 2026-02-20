@@ -16,11 +16,13 @@ import { ThreadsSection } from '@/components/ThreadsSection'
 import { FloatingActionMenu, type PanelType } from '@/components/FloatingActionMenu'
 import { SlidePanel } from '@/components/SlidePanel'
 import { WordPressPanel } from '@/components/WordPressPanel'
+import { PublishedBadge } from '@/components/PublishedBadge'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { usePost } from '@/hooks/usePost'
 import { formatDate } from '@/lib/utils'
 import { isValidUrl, getFaviconUrl, extractImagesFromContent } from '@/lib/url-utils'
-import type { SeoAnalysis, ThreadsContent, WordPressContent } from '@/lib/schemas'
+import { normalizeWordPressData } from '@/lib/wordpress-api'
+import type { SeoAnalysis, ThreadsContent } from '@/lib/schemas'
 import {
   ArrowLeft,
   Edit,
@@ -59,9 +61,15 @@ function PostDetail() {
   const [statusChanging, setStatusChanging] = useState(false)
   const [snackbarMessage, setSnackbarMessage] = useState('')
   const [snackbarVisible, setSnackbarVisible] = useState(false)
-  const [publishedUrl, setPublishedUrl] = useState('')
-  const [publishedUrlError, setPublishedUrlError] = useState('')
-  const [publishedUrlSaving, setPublishedUrlSaving] = useState(false)
+  const [manualUrls, setManualUrls] = useState<string[]>([])
+  const [editingUrlIndex, setEditingUrlIndex] = useState<number | null>(null)
+  const [editingUrlValue, setEditingUrlValue] = useState('')
+  const [addingUrl, setAddingUrl] = useState(false)
+  const [newUrlValue, setNewUrlValue] = useState('')
+  const [urlError, setUrlError] = useState('')
+  const [urlSaving, setUrlSaving] = useState(false)
+  const newUrlInputRef = useRef<HTMLInputElement>(null)
+  const editUrlInputRef = useRef<HTMLInputElement>(null)
   const [activePanel, setActivePanel] = useState<PanelType | null>(null)
   const [activeTab, setActiveTab] = useState<'content' | 'seo'>('content')
   const { authFetch } = useAuthFetch()
@@ -101,15 +109,25 @@ function PostDetail() {
   }, [searchParams, postId])
 
   // 발행 URL 동기화 (Firestore 실시간 반영)
+  const postPublishedUrls = (post as unknown as { publishedUrls?: string[] })?.publishedUrls
   useEffect(() => {
-    setPublishedUrl(post?.publishedUrl || '')
-  }, [post?.publishedUrl])
+    if (postPublishedUrls?.length) {
+      setManualUrls(postPublishedUrls)
+    } else if (post?.publishedUrl) {
+      setManualUrls([post.publishedUrl])
+    } else {
+      setManualUrls([])
+    }
+  }, [postPublishedUrls, post?.publishedUrl])
 
   // WP 싱크 확인: 진입 시 WP 글이 삭제되었으면 Firestore 자동 정리
   const wpSyncChecked = useRef(false)
   useEffect(() => {
-    const wp = (post as unknown as { wordpress?: { wpPostId?: number; postStatus?: string } })?.wordpress
-    if (!wp?.wpPostId || wp.postStatus !== 'published' || wpSyncChecked.current) return
+    if (wpSyncChecked.current || !post) return
+    const normalized = normalizeWordPressData((post as unknown as { wordpress?: Record<string, unknown> })?.wordpress)
+    const hasPublishedSite = Object.values(normalized.sites)
+      .some(d => d.wpPostId && (d.postStatus === 'published' || d.postStatus === 'scheduled'))
+    if (!hasPublishedSite) return
     wpSyncChecked.current = true
 
     authFetch(`/api/wordpress/publish?postId=${postId}&sync=true`)
@@ -133,39 +151,121 @@ function PostDetail() {
     setTimeout(() => setSnackbarVisible(false), 1500)
   }, [post?.title])
 
-  const handlePublishedUrlSave = useCallback(async () => {
-    if (!post?.id) return
-
-    // URL 검증
-    if (!isValidUrl(publishedUrl)) {
-      setPublishedUrlError('올바른 URL을 입력해주세요')
-      return
-    }
-
-    setPublishedUrlError('')
-    setPublishedUrlSaving(true)
+  const saveManualUrls = useCallback(async (urls: string[]) => {
+    if (!post?.id) return false
+    setUrlError('')
+    setUrlSaving(true)
     try {
       const res = await authFetch(`/api/posts/${post.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publishedUrl: publishedUrl.trim() }),
+        body: JSON.stringify({ publishedUrls: urls }),
       })
       const data = await res.json()
-
       if (data.success) {
         setSnackbarMessage('발행 주소 저장됨')
         setSnackbarVisible(true)
         setTimeout(() => setSnackbarVisible(false), 1500)
+        return true
       } else {
-        setPublishedUrlError('저장에 실패했습니다')
+        setUrlError('저장에 실패했습니다')
+        return false
       }
     } catch (err) {
-      setPublishedUrlError('저장에 실패했습니다')
+      setUrlError('저장에 실패했습니다')
       console.error(err)
+      return false
     } finally {
-      setPublishedUrlSaving(false)
+      setUrlSaving(false)
     }
-  }, [post?.id, publishedUrl, authFetch])
+  }, [post?.id, authFetch])
+
+  const handleAddUrl = useCallback(async () => {
+    const trimmed = newUrlValue.trim()
+    if (!trimmed) {
+      setAddingUrl(false)
+      setNewUrlValue('')
+      return
+    }
+    if (!isValidUrl(trimmed)) {
+      setUrlError('올바른 URL을 입력해주세요')
+      return
+    }
+    if (isDuplicateUrl(trimmed)) {
+      setUrlError('이미 등록된 주소입니다')
+      return
+    }
+    const updated = [...manualUrls, trimmed]
+    const ok = await saveManualUrls(updated)
+    if (ok) {
+      setManualUrls(updated)
+      setAddingUrl(false)
+      setNewUrlValue('')
+    }
+  }, [newUrlValue, manualUrls, saveManualUrls])
+
+  const handleRemoveUrl = useCallback(async (index: number) => {
+    const updated = manualUrls.filter((_, i) => i !== index)
+    const ok = await saveManualUrls(updated)
+    if (ok) {
+      setManualUrls(updated)
+    }
+  }, [manualUrls, saveManualUrls])
+
+  const handleEditUrlSave = useCallback(async () => {
+    if (editingUrlIndex === null) return
+    const trimmed = editingUrlValue.trim()
+    if (!trimmed) {
+      // 빈 값 → 삭제로 처리
+      await handleRemoveUrl(editingUrlIndex)
+      setEditingUrlIndex(null)
+      setEditingUrlValue('')
+      return
+    }
+    if (!isValidUrl(trimmed)) {
+      setUrlError('올바른 URL을 입력해주세요')
+      return
+    }
+    if (isDuplicateUrl(trimmed, editingUrlIndex)) {
+      setUrlError('이미 등록된 주소입니다')
+      return
+    }
+    const updated = [...manualUrls]
+    updated[editingUrlIndex] = trimmed
+    const ok = await saveManualUrls(updated)
+    if (ok) {
+      setManualUrls(updated)
+      setEditingUrlIndex(null)
+      setEditingUrlValue('')
+    }
+  }, [editingUrlIndex, editingUrlValue, manualUrls, saveManualUrls, handleRemoveUrl])
+
+  // WP published sites
+  const wpPublishedSites = useMemo(() => {
+    if (!post) return []
+    const normalized = normalizeWordPressData((post as unknown as { wordpress?: Record<string, unknown> })?.wordpress)
+    return Object.entries(normalized.sites)
+      .filter(([, data]) => data.wpPostId && data.wpPostUrl && data.postStatus !== 'not_published' && data.postStatus !== 'failed')
+      .map(([siteId, data]) => ({
+        siteId,
+        url: data.wpPostUrl!,
+        siteUrl: data.wpSiteUrl,
+        status: data.postStatus,
+      }))
+  }, [post])
+
+  // WP URL set for dedup with manual input
+  const wpUrlSet = useMemo(() => new Set(wpPublishedSites.map(s => s.url)), [wpPublishedSites])
+
+  // 중복 URL 검사 (ref로 최신 값 참조 → 선언 순서 무관)
+  const manualUrlsRef = useRef(manualUrls)
+  manualUrlsRef.current = manualUrls
+  const wpUrlSetRef = useRef(wpUrlSet)
+  wpUrlSetRef.current = wpUrlSet
+  const isDuplicateUrl = useCallback((url: string, excludeIndex?: number) => {
+    const existing = manualUrlsRef.current.filter((_, i) => i !== excludeIndex).map(u => u.trim())
+    return existing.includes(url) || wpUrlSetRef.current.has(url)
+  }, [])
 
   // content에서 이미지 URL 추출 (useMemo로 캐싱)
   const images = useMemo(
@@ -395,20 +495,18 @@ function PostDetail() {
 
                 {/* Status Badge & Toggle */}
                 <div className="flex items-center gap-2">
-                  <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border flex items-center gap-1.5 ${post.status === 'published'
-                      ? 'bg-green-600 text-white border-green-700'
-                      : 'bg-amber-500 text-white border-amber-600'
-                    }`}>
-                    {post.status === 'published' && post.publishedUrl && getFaviconUrl(post.publishedUrl) && (
-                      <img
-                        src={getFaviconUrl(post.publishedUrl)!}
-                        alt=""
-                        className="w-3.5 h-3.5 rounded-sm bg-white"
-                        onError={(e) => { e.currentTarget.style.display = 'none' }}
-                      />
-                    )}
-                    {post.status === 'published' ? '발행됨' : '초안'}
-                  </span>
+                  {post.status === 'published' ? (
+                    <PublishedBadge
+                      wordpress={(post as unknown as { wordpress?: Record<string, unknown> }).wordpress}
+                      publishedUrls={manualUrls}
+                      publishedUrl={post.publishedUrl}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-green-600 text-white border-green-700"
+                    />
+                  ) : (
+                    <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-amber-500 text-white border-amber-600">
+                      초안
+                    </span>
+                  )}
 
                   <button
                     onClick={handleStatusChange}
@@ -496,47 +594,208 @@ function PostDetail() {
           </div>
         )}
 
-        {/* Published URL */}
+        {/* Published URLs */}
         <div className="mt-4">
           <div className="flex items-center gap-2 mb-2">
             <Link2 className="w-4 h-4 text-gray-400 dark:text-gray-500" />
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">발행 주소</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="url"
-              value={publishedUrl}
-              onChange={(e) => {
-                setPublishedUrl(e.target.value)
-                setPublishedUrlError('')
-              }}
-              onBlur={handlePublishedUrlSave}
-              placeholder="https://example.com/blog/..."
-              className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500 ${publishedUrlError ? 'border-red-500' : 'border-border'
-                }`}
-              disabled={publishedUrlSaving}
-            />
-            {publishedUrl.trim() && isValidUrl(publishedUrl) && (
-              <a
-                href={publishedUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <ExternalLink className="w-4 h-4" />
-                열기
-              </a>
+            {(wpPublishedSites.length > 0 || manualUrls.filter(u => !wpUrlSet.has(u)).length > 0) && (
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                {wpPublishedSites.length + manualUrls.filter(u => !wpUrlSet.has(u)).length}개 사이트
+              </span>
             )}
           </div>
-          {publishedUrlError && (
-            <p className="mt-1 text-sm text-red-500">{publishedUrlError}</p>
+
+          {/* WP Published Sites */}
+          {wpPublishedSites.length > 0 && (
+            <div className="space-y-2 mb-2">
+              {wpPublishedSites.map(({ siteId, url, siteUrl, status }) => {
+                let domain = ''
+                try { domain = new URL(url).hostname } catch { /* */ }
+                const isScheduled = status === 'scheduled'
+                return (
+                  <div key={siteId} className="flex items-center gap-2 group">
+                    <div className="flex-1 flex items-center gap-2 min-w-0 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+                      {getFaviconUrl(url) && (
+                        <img
+                          src={getFaviconUrl(url)!}
+                          alt=""
+                          className="w-4 h-4 rounded-sm bg-white flex-shrink-0"
+                          onError={(e) => { e.currentTarget.style.display = 'none' }}
+                        />
+                      )}
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">
+                        {domain}
+                      </span>
+                      {isScheduled && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex-shrink-0">
+                          예약
+                        </span>
+                      )}
+                      <span className="text-sm text-gray-600 dark:text-gray-300 truncate">
+                        {url}
+                      </span>
+                    </div>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      열기
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
           )}
-          {publishedUrlSaving && (
-            <p className="mt-1 text-sm text-gray-500 flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              저장 중...
-            </p>
-          )}
+
+          {/* Manual URLs: read mode rows + add button */}
+          {(() => {
+            const filteredManualUrls = manualUrls.filter(url => !wpUrlSet.has(url))
+
+            return (
+              <>
+                {filteredManualUrls.length > 0 && (
+                  <div className="space-y-2 mb-2">
+                    {filteredManualUrls.map((url, displayIdx) => {
+                      // 원본 배열에서의 실제 인덱스 찾기
+                      const realIndex = manualUrls.indexOf(url)
+                      const isEditing = editingUrlIndex === realIndex
+                      const favicon = getFaviconUrl(url)
+
+                      if (isEditing) {
+                        return (
+                          <div key={realIndex} className="flex items-center gap-2">
+                            <input
+                              ref={editUrlInputRef}
+                              type="url"
+                              value={editingUrlValue}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                setEditingUrlValue(v)
+                                const trimmed = v.trim()
+                                if (trimmed && isValidUrl(trimmed) && isDuplicateUrl(trimmed, editingUrlIndex ?? undefined)) {
+                                  setUrlError('이미 등록된 주소입니다')
+                                } else {
+                                  setUrlError('')
+                                }
+                              }}
+                              onBlur={handleEditUrlSave}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); handleEditUrlSave() }
+                                if (e.key === 'Escape') { setEditingUrlIndex(null); setEditingUrlValue(''); setUrlError('') }
+                              }}
+                              className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500 ${urlError ? 'border-red-500' : 'border-border'}`}
+                              disabled={urlSaving}
+                              autoFocus
+                            />
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <div key={realIndex} className="flex items-center gap-2 group">
+                          <div
+                            onClick={() => {
+                              setEditingUrlIndex(realIndex)
+                              setEditingUrlValue(url)
+                              setUrlError('')
+                              setTimeout(() => editUrlInputRef.current?.focus(), 0)
+                            }}
+                            className="flex-1 flex items-center gap-2 min-w-0 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                          >
+                            {favicon && (
+                              <img
+                                src={favicon}
+                                alt=""
+                                className="w-4 h-4 rounded-sm bg-white flex-shrink-0"
+                                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                              />
+                            )}
+                            <span className="text-sm text-gray-600 dark:text-gray-300 truncate">
+                              {url}
+                            </span>
+                          </div>
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            열기
+                          </a>
+                          <button
+                            onClick={() => handleRemoveUrl(realIndex)}
+                            disabled={urlSaving}
+                            className="inline-flex items-center justify-center w-8 h-8 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0"
+                            title="삭제"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Add URL */}
+                {addingUrl || (filteredManualUrls.length === 0 && wpPublishedSites.length === 0) ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={newUrlInputRef}
+                        type="url"
+                        value={newUrlValue}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setNewUrlValue(v)
+                          const trimmed = v.trim()
+                          if (trimmed && isValidUrl(trimmed) && isDuplicateUrl(trimmed)) {
+                            setUrlError('이미 등록된 주소입니다')
+                          } else {
+                            setUrlError('')
+                          }
+                        }}
+                        onBlur={handleAddUrl}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); handleAddUrl() }
+                          if (e.key === 'Escape') { setAddingUrl(false); setNewUrlValue(''); setUrlError('') }
+                        }}
+                        placeholder="https://example.com/blog/..."
+                        className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500 ${urlError ? 'border-red-500' : 'border-border'}`}
+                        disabled={urlSaving}
+                        autoFocus
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setAddingUrl(true)
+                      setUrlError('')
+                      setTimeout(() => newUrlInputRef.current?.focus(), 0)
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg transition-colors"
+                  >
+                    + 주소 추가
+                  </button>
+                )}
+
+                {urlError && (
+                  <p className="mt-1 text-sm text-red-500">{urlError}</p>
+                )}
+                {urlSaving && (
+                  <p className="mt-1 text-sm text-gray-500 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    저장 중...
+                  </p>
+                )}
+              </>
+            )
+          })()}
         </div>
 
         {/* Products */}
@@ -759,7 +1018,7 @@ function PostDetail() {
                   updatedAt: post.updatedAt,
                   slug: (post as unknown as { slug?: string }).slug,
                   excerpt: (post as unknown as { excerpt?: string }).excerpt,
-                  wordpress: (post as unknown as { wordpress?: WordPressContent }).wordpress,
+                  wordpress: (post as unknown as { wordpress?: Record<string, unknown> }).wordpress,
                 }}
               />
             </SlidePanel>
