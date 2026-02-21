@@ -1,22 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
+import { handleApiError, requireAdmin, requireResource } from '@/lib/api-error-handler'
 
 // PATCH: 콘텐츠 상태 수정
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const auth = await getAuthFromRequest(request)
-    if (!auth || !auth.isAdmin) {
-      return NextResponse.json(
-        { success: false, error: '관리자 권한이 필요합니다' },
-        { status: 403 }
-      )
-    }
+    requireAdmin(auth)
 
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { status } = body
 
@@ -31,13 +27,7 @@ export async function PATCH(
     const db = getDb()
     const postRef = db.collection('blog_posts').doc(id)
     const postDoc = await postRef.get()
-
-    if (!postDoc.exists) {
-      return NextResponse.json(
-        { success: false, error: '콘텐츠를 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
+    requireResource(postDoc.exists ? postDoc : null, '콘텐츠를 찾을 수 없습니다')
 
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -51,39 +41,24 @@ export async function PATCH(
       message: '콘텐츠가 업데이트되었습니다',
     })
   } catch (error) {
-    console.error('PATCH content error:', error)
-    return NextResponse.json(
-      { success: false, error: '콘텐츠 수정에 실패했습니다' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
 
 // DELETE: 콘텐츠 삭제
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const auth = await getAuthFromRequest(request)
-    if (!auth || !auth.isAdmin) {
-      return NextResponse.json(
-        { success: false, error: '관리자 권한이 필요합니다' },
-        { status: 403 }
-      )
-    }
+    requireAdmin(auth)
 
-    const { id } = params
+    const { id } = await params
     const db = getDb()
     const postRef = db.collection('blog_posts').doc(id)
     const postDoc = await postRef.get()
-
-    if (!postDoc.exists) {
-      return NextResponse.json(
-        { success: false, error: '콘텐츠를 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
+    requireResource(postDoc.exists ? postDoc : null, '콘텐츠를 찾을 수 없습니다')
 
     await postRef.delete()
 
@@ -92,10 +67,6 @@ export async function DELETE(
       message: '콘텐츠가 삭제되었습니다',
     })
   } catch (error) {
-    console.error('DELETE content error:', error)
-    return NextResponse.json(
-      { success: false, error: '콘텐츠 삭제에 실패했습니다' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { getDb } from '@/lib/firebase-admin'
 import { verifyIdToken } from '@/lib/auth-admin'
+import { logger } from '@/lib/logger'
 
 // API 키 생성 함수
 function generateApiKey(): string {
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, apiKey: newApiKey })
   } catch (error) {
-    console.error('API key regenerate error:', error)
+    logger.error('API key regenerate error:', error)
     return NextResponse.json(
       { success: false, error: 'API 키 재발급에 실패했습니다' },
       { status: 500 }

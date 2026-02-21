@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useAuth } from '@/components/AuthProvider'
+import { useAuth } from '@/components/layout/AuthProvider'
 import { Users, FileText, Package, TrendingUp, Clock, ArrowRight } from 'lucide-react'
+import { formatDateFns } from '@/lib/utils'
 
 interface Stats {
   totalUsers: number
@@ -103,11 +104,7 @@ export default function AdminDashboardPage() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-'
-    return new Date(dateString).toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return formatDateFns(dateString, 'yyyy년 M월 d일')
   }
 
   return (

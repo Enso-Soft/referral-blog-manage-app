@@ -2,9 +2,9 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { PostEditor } from '@/components/PostEditor'
-import { ProductEditor } from '@/components/ProductEditor'
-import { AuthGuard } from '@/components/AuthGuard'
+import { PostEditor } from '@/components/post/PostEditor'
+import { ProductEditor } from '@/components/product/ProductEditor'
+import { AuthGuard } from '@/components/layout/AuthGuard'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -24,7 +24,7 @@ interface Post {
 
 // 글자 수 계산
 function countWords(html: string): number {
-  const text = html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+  const text = html.replace(/<[^>]*>/g, '').replace(/\s+/g, '')
   return text.length
 }
 

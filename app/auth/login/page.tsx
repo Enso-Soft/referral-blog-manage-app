@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithGoogle, getIdToken } from '@/lib/auth'
 import { Loader2, AlertTriangle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useInAppBrowser } from '@/hooks/useInAppBrowser'
 
 export default function LoginPage() {
@@ -36,11 +37,12 @@ export default function LoginPage() {
       })
 
       router.push('/')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Google login error:', err)
-      if (err.code === 'auth/popup-closed-by-user') {
+      const firebaseErr = err as { code?: string }
+      if (firebaseErr.code === 'auth/popup-closed-by-user') {
         setError('로그인이 취소되었습니다')
-      } else if (err.code === 'auth/popup-blocked') {
+      } else if (firebaseErr.code === 'auth/popup-blocked') {
         setError('팝업이 차단되었습니다. 팝업 차단을 해제해주세요')
       } else {
         setError('Google 로그인에 실패했습니다')
@@ -82,12 +84,11 @@ export default function LoginPage() {
             </div>
           )}
 
-          <button
-            type="button"
+          <Button
+            variant="outline"
             onClick={handleGoogleLogin}
             disabled={loading || isInAppBrowser}
-            className={`w-full py-3 px-4 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${isInAppBrowser ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+            className={`w-full py-3 px-4 h-auto font-medium ${isInAppBrowser ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {loading ? (
               <>
@@ -117,7 +118,7 @@ export default function LoginPage() {
                 Google로 로그인
               </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

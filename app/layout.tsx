@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { Providers } from '@/components/Providers'
-import { Header } from '@/components/Header'
+import { Providers } from '@/components/layout/Providers'
+import { Header } from '@/components/layout/Header'
 
 export const metadata: Metadata = {
   title: '블로그 콘텐츠 관리',

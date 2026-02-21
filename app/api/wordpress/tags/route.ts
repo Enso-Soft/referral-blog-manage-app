@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth } from '@/lib/api-error-handler'
-import { getWPTags, createWPTag, getWPConnectionFromUserData } from '@/lib/wordpress-api'
+import { getWPTags, createWPTag } from '@/lib/wordpress-api'
+import { getDecryptedWPConnection } from '@/lib/api-helpers'
+import type { FirestoreUserData } from '@/lib/schemas/user'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, wpSiteId)
+    const connResult = getDecryptedWPConnection(userData as FirestoreUserData, wpSiteId)
     if (!connResult) {
       return NextResponse.json(
         { success: false, error: 'WordPress가 연결되어 있지 않습니다.' },
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, wpSiteId)
+    const connResult = getDecryptedWPConnection(userData as FirestoreUserData, wpSiteId)
     if (!connResult) {
       return NextResponse.json(
         { success: false, error: 'WordPress가 연결되어 있지 않습니다.' },

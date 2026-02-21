@@ -5,21 +5,26 @@ import Link from 'next/link'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import JSZip from 'jszip'
-import { PostViewer } from '@/components/PostViewer'
-import { CopyButton, RichCopyButton } from '@/components/CopyButton'
-import { AuthGuard } from '@/components/AuthGuard'
-import { Snackbar } from '@/components/Snackbar'
-import { AIChatContent } from '@/components/AIChatModal'
-import { DisclaimerButtons } from '@/components/DisclaimerButtons'
-import { SeoAnalysisView } from '@/components/SeoAnalysisView'
-import { ThreadsSection } from '@/components/ThreadsSection'
-import { FloatingActionMenu, type PanelType } from '@/components/FloatingActionMenu'
-import { SlidePanel } from '@/components/SlidePanel'
-import { WordPressPanel } from '@/components/WordPressPanel'
-import { PublishedBadge } from '@/components/PublishedBadge'
+import { PostViewer } from '@/components/post/PostViewer'
+import { CopyButton, RichCopyButton } from '@/components/post/CopyButton'
+import { AuthGuard } from '@/components/layout/AuthGuard'
+import { Snackbar } from '@/components/common/Snackbar'
+import { AIChatContent } from '@/components/ai/AIChatModal'
+import { DisclaimerButtons } from '@/components/post/DisclaimerButtons'
+import { SeoAnalysisView } from '@/components/seo/SeoAnalysisView'
+import { ThreadsSection } from '@/components/threads/ThreadsSection'
+import { FloatingActionMenu, type PanelType } from '@/components/common/FloatingActionMenu'
+import { SlidePanel } from '@/components/common/SlidePanel'
+import { WordPressPanel } from '@/components/wordpress/WordPressPanel'
+import { PublishedBadge } from '@/components/post/PublishedBadge'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { usePost } from '@/hooks/usePost'
+import { usePosts } from '@/hooks/usePosts'
 import { formatDate } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { isValidUrl, getFaviconUrl, extractImagesFromContent } from '@/lib/url-utils'
 import { normalizeWordPressData } from '@/lib/wordpress-api'
 import type { SeoAnalysis, ThreadsContent } from '@/lib/schemas'
@@ -35,11 +40,9 @@ import {
   ExternalLink,
   ShoppingBag,
   ChevronDown,
-  ChevronUp,
   Download,
   ImageIcon,
   Send,
-  FileEdit,
   User,
   Link2,
   RotateCcw,
@@ -72,7 +75,10 @@ function PostDetail() {
   const editUrlInputRef = useRef<HTMLInputElement>(null)
   const [activePanel, setActivePanel] = useState<PanelType | null>(null)
   const [activeTab, setActiveTab] = useState<'content' | 'seo'>('content')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const { authFetch } = useAuthFetch()
+  const { removePost, hasMore, loadMore } = usePosts()
 
   // 패널 열림 시 wrapper padding-right로 중앙 정렬 유지하며 공간 확보 (PC만)
   useEffect(() => {
@@ -388,24 +394,42 @@ function PostDetail() {
     }
   }, [post?.id, post?.content, authFetch])
 
-  const handleDelete = useCallback(async () => {
+  const handleDeleteConfirm = useCallback(async () => {
     if (!post?.id) return
-    if (!window.confirm('정말로 이 글을 삭제하시겠습니까?')) return
 
+    setShowDeleteDialog(false)
+    setIsDeleting(true)
     try {
       const res = await authFetch(`/api/posts/${post.id}`, { method: 'DELETE' })
       const data = await res.json()
 
       if (data.success) {
-        router.push('/')
+        removePost(post.id)
+        if (hasMore) loadMore()
+        router.push('/', { scroll: false })
       } else {
-        alert('삭제에 실패했습니다: ' + data.error)
+        setIsDeleting(false)
+        setSnackbarMessage('삭제에 실패했습니다: ' + (data.error || ''))
+        setSnackbarVisible(true)
+        setTimeout(() => setSnackbarVisible(false), 2000)
       }
     } catch (err) {
-      alert('삭제에 실패했습니다.')
+      setIsDeleting(false)
+      setSnackbarMessage('삭제에 실패했습니다.')
+      setSnackbarVisible(true)
+      setTimeout(() => setSnackbarVisible(false), 2000)
       console.error(err)
     }
-  }, [post?.id, authFetch, router])
+  }, [post?.id, authFetch, router, removePost])
+
+  if (isDeleting) {
+    return (
+      <div className="flex items-center justify-center py-12 gap-3">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <span className="text-muted-foreground">삭제 중...</span>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -424,6 +448,7 @@ function PostDetail() {
         </p>
         <Link
           href="/"
+          scroll={false}
           className="mt-4 text-blue-600 hover:underline flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -437,13 +462,13 @@ function PostDetail() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <Link
-          href="/"
+        <button
+          onClick={() => router.push('/', { scroll: false })}
           className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
           목록으로
-        </Link>
+        </button>
 
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="flex-1 min-w-[280px]">
@@ -460,20 +485,22 @@ function PostDetail() {
               <div className="flex flex-wrap items-center gap-3">
                 {/* Type Badge & Toggle */}
                 <div className="flex items-center gap-2">
-                  <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${post.postType === 'affiliate'
-                      ? 'bg-indigo-600 text-white border-indigo-700'
-                      : 'bg-slate-600 text-white border-slate-700'
-                    }`}>
+                  <Badge className={post.postType === 'affiliate'
+                      ? 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-600'
+                      : 'bg-slate-600 text-white border-slate-700 hover:bg-slate-600'
+                    }>
                     {post.postType === 'affiliate' ? '제휴' : '일반'}
-                  </span>
+                  </Badge>
 
-                  <button
+                  <Button
+                    variant="outline"
+                    size="xs"
                     onClick={handleTypeChange}
                     disabled={statusChanging}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${post.postType === 'affiliate'
-                        ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                        : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/40'
-                      } ${statusChanging ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`rounded-lg ${post.postType === 'affiliate'
+                        ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border-transparent'
+                        : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/40 border-transparent'
+                      }`}
                   >
                     {statusChanging ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -488,7 +515,7 @@ function PostDetail() {
                         <span>제휴 글로</span>
                       </>
                     )}
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="w-px h-4 bg-border hidden sm:block" />
@@ -503,18 +530,20 @@ function PostDetail() {
                       className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-green-600 text-white border-green-700"
                     />
                   ) : (
-                    <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-amber-500 text-white border-amber-600">
+                    <Badge className="bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
                       초안
-                    </span>
+                    </Badge>
                   )}
 
-                  <button
+                  <Button
+                    variant="outline"
+                    size="xs"
                     onClick={handleStatusChange}
                     disabled={statusChanging}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${post.status === 'draft'
+                    className={`rounded-lg border-transparent ${post.status === 'draft'
                         ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/40'
                         : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
-                      } ${statusChanging ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      }`}
                   >
                     {statusChanging ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -529,7 +558,7 @@ function PostDetail() {
                         <span>초안으로</span>
                       </>
                     )}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -539,6 +568,16 @@ function PostDetail() {
                 <Clock className="w-4 h-4" />
                 <span>{formatDate(post.createdAt, { includeTime: true })}</span>
               </div>
+
+              {post.metadata?.wordCount != null && (
+                <>
+                  <div className="w-px h-3 bg-border hidden sm:block" />
+                  <div className="flex items-center gap-1.5">
+                    <FileText className="w-4 h-4" />
+                    <span>{post.metadata.wordCount.toLocaleString()}자</span>
+                  </div>
+                </>
+              )}
 
               {post.userEmail && (
                 <>
@@ -564,13 +603,14 @@ function PostDetail() {
                 <Edit className="w-4 h-4" />
                 수정
               </Link>
-              <button
-                onClick={handleDelete}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium whitespace-nowrap text-destructive bg-background border border-destructive/20 dark:border-red-800 hover:bg-destructive/10 rounded-xl transition-colors shadow-sm"
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteDialog(true)}
+                className="text-destructive border-destructive/20 dark:border-red-800 hover:bg-destructive/10 hover:text-destructive rounded-xl shadow-sm"
               >
                 <Trash2 className="w-4 h-4" />
                 삭제
-              </button>
+              </Button>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <DisclaimerButtons content={post.content} onInsert={handleDisclaimerInsert} />
@@ -583,13 +623,15 @@ function PostDetail() {
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <Tag className="w-4 h-4 text-gray-400 dark:text-gray-500" />
             {post.keywords.map((keyword, i) => (
-              <button
+              <Button
                 key={i}
+                variant="ghost"
+                size="xs"
                 onClick={() => handleKeywordCopy(keyword)}
-                className="text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                className="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50"
               >
                 #{keyword}
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -668,7 +710,7 @@ function PostDetail() {
                       if (isEditing) {
                         return (
                           <div key={realIndex} className="flex items-center gap-2">
-                            <input
+                            <Input
                               ref={editUrlInputRef}
                               type="url"
                               value={editingUrlValue}
@@ -687,7 +729,7 @@ function PostDetail() {
                                 if (e.key === 'Enter') { e.preventDefault(); handleEditUrlSave() }
                                 if (e.key === 'Escape') { setEditingUrlIndex(null); setEditingUrlValue(''); setUrlError('') }
                               }}
-                              className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500 ${urlError ? 'border-red-500' : 'border-border'}`}
+                              className={`flex-1 text-sm ${urlError ? 'border-red-500' : ''}`}
                               disabled={urlSaving}
                               autoFocus
                             />
@@ -727,14 +769,16 @@ function PostDetail() {
                             <ExternalLink className="w-4 h-4" />
                             열기
                           </a>
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
                             onClick={() => handleRemoveUrl(realIndex)}
                             disabled={urlSaving}
-                            className="inline-flex items-center justify-center w-8 h-8 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0"
+                            className="text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex-shrink-0"
                             title="삭제"
                           >
                             ×
-                          </button>
+                          </Button>
                         </div>
                       )
                     })}
@@ -745,7 +789,7 @@ function PostDetail() {
                 {addingUrl || (filteredManualUrls.length === 0 && wpPublishedSites.length === 0) ? (
                   <>
                     <div className="flex items-center gap-2">
-                      <input
+                      <Input
                         ref={newUrlInputRef}
                         type="url"
                         value={newUrlValue}
@@ -765,23 +809,24 @@ function PostDetail() {
                           if (e.key === 'Escape') { setAddingUrl(false); setNewUrlValue(''); setUrlError('') }
                         }}
                         placeholder="https://example.com/blog/..."
-                        className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500 ${urlError ? 'border-red-500' : 'border-border'}`}
+                        className={`flex-1 text-sm ${urlError ? 'border-red-500' : ''}`}
                         disabled={urlSaving}
-                        autoFocus
                       />
                     </div>
                   </>
                 ) : (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       setAddingUrl(true)
                       setUrlError('')
                       setTimeout(() => newUrlInputRef.current?.focus(), 0)
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg transition-colors"
+                    className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-dashed border-gray-300 dark:border-gray-600 rounded-lg"
                   >
                     + 주소 추가
-                  </button>
+                  </Button>
                 )}
 
                 {urlError && (
@@ -801,20 +846,15 @@ function PostDetail() {
         {/* Products */}
         {post.products && post.products.length > 0 && (
           <div className="mt-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setProductsOpen(!productsOpen)}
-              className="w-full flex items-center justify-between p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              className="w-full flex items-center justify-start gap-2 p-4 h-auto rounded-none hover:bg-gray-100 dark:hover:bg-gray-700"
             >
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">제품 목록 ({post.products.length}개)</span>
-              </div>
-              {productsOpen ? (
-                <ChevronUp className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              )}
-            </button>
+              <ChevronDown className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${productsOpen ? 'rotate-180' : ''}`} />
+              <ShoppingBag className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">제품 목록 ({post.products.length}개)</span>
+            </Button>
             <div
               className={`grid transition-all duration-300 ease-in-out ${productsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
                 }`}
@@ -845,18 +885,21 @@ function PostDetail() {
         {images.length > 0 && (
           <div className="mt-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="relative">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => setImagesOpen(!imagesOpen)}
-                className="w-full flex items-center gap-2 p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="w-full flex items-center justify-start gap-2 p-4 h-auto rounded-none hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 <ChevronDown className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${imagesOpen ? 'rotate-180' : ''}`} />
                 <ImageIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">이미지 목록 ({images.length}개)</span>
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="default"
+                size="xs"
                 onClick={handleDownloadAll}
                 disabled={zipping}
-                className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors"
+                className="absolute right-4 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
               >
                 {zipping ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -864,7 +907,7 @@ function PostDetail() {
                   <Download className="w-3.5 h-3.5" />
                 )}
                 {zipping ? '압축 중...' : '전체 다운로드'}
-              </button>
+              </Button>
             </div>
             <div
               className={`grid transition-all duration-300 ease-in-out ${imagesOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
@@ -879,36 +922,36 @@ function PostDetail() {
                           src={imageUrl}
                           alt={`이미지 ${i + 1}`}
                           className="w-full h-full object-cover"
+                          style={{ height: '100%' }}
                         />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => {
                               const ext = imageUrl.split('?')[0].split('.').pop()?.toLowerCase() || 'jpg'
                               const safeTitle = (post?.title || 'image').replace(/[<>:"/\\|?*]/g, '').trim()
                               handleDownload(imageUrl, `${safeTitle}-${i + 1}.${ext}`)
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-2.5 text-white bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-white bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30 hover:text-white"
                             title="다운로드"
                           >
                             <Download className="w-5 h-5" />
-                          </button>
+                          </Button>
                         </div>
-                        {i === 0 && (
-                          <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-semibold text-white bg-blue-600 rounded">
-                            썸네일
-                          </span>
-                        )}
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
                           onClick={() => {
                             const ext = imageUrl.split('?')[0].split('.').pop()?.toLowerCase() || 'jpg'
                             const safeTitle = (post?.title || 'image').replace(/[<>:"/\\|?*]/g, '').trim()
                             handleDownload(imageUrl, `${safeTitle}-${i + 1}.${ext}`)
                           }}
-                          className="absolute bottom-1 right-1 p-1.5 text-white/90 bg-black/50 rounded-md hover:bg-black/60 transition-colors sm:hidden"
+                          className="absolute bottom-1 right-1 p-1.5 text-white/90 bg-black/50 rounded-md hover:bg-black/60 hover:text-white sm:hidden"
                           title="다운로드"
                         >
                           <Download className="w-4 h-4" />
-                        </button>
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -941,10 +984,11 @@ function PostDetail() {
                 const Icon = tab.icon
                 const isActive = activeTab === tab.id
                 return (
-                  <button
+                  <Button
                     key={tab.id}
+                    variant="ghost"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+                    className={`relative px-4 py-2.5 h-auto rounded-none ${
                       isActive
                         ? 'text-blue-600 dark:text-blue-400'
                         : 'text-muted-foreground hover:text-foreground'
@@ -959,7 +1003,7 @@ function PostDetail() {
                         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                       />
                     )}
-                  </button>
+                  </Button>
                 )
               })}
             </div>
@@ -1039,6 +1083,27 @@ function PostDetail() {
           </>
         )
       })()}
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent showCloseButton={false} className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>글 삭제</DialogTitle>
+            <DialogDescription>
+              이 글을 삭제하시겠습니까? 삭제된 글은 복구할 수 없습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>
+              <Trash2 className="w-4 h-4" />
+              삭제
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Snackbar */}
       <Snackbar message={snackbarMessage} visible={snackbarVisible} />

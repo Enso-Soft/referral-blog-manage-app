@@ -2,21 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { v4 as uuidv4 } from 'uuid'
+import { format } from 'date-fns'
 import sharp from 'sharp'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
-import { handleApiError, requireAuth } from '@/lib/api-error-handler'
+import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
+import { logger } from '@/lib/logger'
 import { CreateAIWriteRequestSchema } from '@/lib/schemas/aiRequest'
+import { validateImageBuffer } from '@/lib/file-validation'
+import { getS3Config } from '@/lib/env'
 
 const AI_API_URL = process.env.AI_API_URL || 'https://api.enso-soft.xyz/v1/ai/blog-writer'
 
-const s3Client = new S3Client({
-  region: process.env.S3_REGION || 'ap-northeast-2',
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
-  },
-})
+function createS3Client() {
+  const config = getS3Config()
+  return new S3Client({
+    region: config.region,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  })
+}
 
 // POST: AI 블로그 작성 요청
 export async function POST(request: NextRequest) {
@@ -47,16 +54,21 @@ export async function POST(request: NextRequest) {
 
     // 이미지 처리: WebP 변환 → S3 업로드 (URL) + base64 (AI API용) — 병렬 처리
     const entries = Array.from(formData.entries())
-    const bucket = process.env.S3_BUCKET || 'referral-blog-images'
-    const region = process.env.S3_REGION || 'ap-northeast-2'
-    const now_date = new Date()
-    const dateFolder = `${now_date.getFullYear()}/${String(now_date.getMonth() + 1).padStart(2, '0')}/${String(now_date.getDate()).padStart(2, '0')}`
+    const s3Config = getS3Config()
+    const s3Client = createS3Client()
+    const dateFolder = format(new Date(), 'yyyy/MM/dd')
 
     const imageFiles = entries.filter(([key, value]) => key.startsWith('image_') && value instanceof File) as [string, File][]
 
     const imageResults = await Promise.all(
       imageFiles.map(async ([, file]) => {
         const buffer = Buffer.from(await file.arrayBuffer())
+
+        // Magic byte 검증 (MIME 위조 방지)
+        if (!validateImageBuffer(buffer, file.type)) {
+          throw new Error(`이미지 파일의 내용이 선언된 형식(${file.type})과 일치하지 않습니다`)
+        }
+
         const webpBuffer = await sharp(buffer).webp({ quality: 80 }).toBuffer()
 
         const uniqueId = uuidv4().slice(0, 8)
@@ -64,7 +76,7 @@ export async function POST(request: NextRequest) {
 
         await s3Client.send(
           new PutObjectCommand({
-            Bucket: bucket,
+            Bucket: s3Config.bucket,
             Key: s3Key,
             Body: webpBuffer,
             ContentType: 'image/webp',
@@ -72,7 +84,7 @@ export async function POST(request: NextRequest) {
         )
 
         return {
-          url: `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`,
+          url: `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${s3Key}`,
           base64: `data:image/webp;base64,${webpBuffer.toString('base64')}`,
         }
       })
@@ -149,8 +161,7 @@ async function callAIApi(
       images: data.images,
       options: data.options,
     }
-    console.log('[AI API] 요청 URL:', AI_API_URL)
-    console.log('[AI API] 요청 body:', JSON.stringify({ ...requestBody, images: `[${data.images.length}개 이미지]` }))
+    logger.debug('[AI API] 요청:', AI_API_URL, `이미지 ${data.images.length}개`)
 
     const response = await fetch(AI_API_URL, {
       method: 'POST',
@@ -161,14 +172,13 @@ async function callAIApi(
       body: JSON.stringify(requestBody),
     })
 
-    console.log('[AI API] 응답 status:', response.status)
+    logger.debug('[AI API] 응답 status:', response.status)
 
     const responseBody = await response.json().catch(() => ({}))
-    console.log('[AI API] 응답 body:', JSON.stringify(responseBody))
 
     // 실패 응답: statusCode !== 200, body: {"detail": "에러 메시지"}
     if (!response.ok) {
-      console.error(`[AI API] 요청 거부 (${response.status}):`, responseBody.detail || JSON.stringify(responseBody))
+      logger.error(`[AI API] 요청 거부 (${response.status})`, responseBody.detail)
       throw new Error(responseBody.detail || `AI API 오류: ${response.status}`)
     }
 
@@ -178,7 +188,7 @@ async function callAIApi(
 
     // 요청 전달 성공 - pending 상태 유지 (Firestore 업데이트 불필요)
   } catch (error) {
-    console.error('[AI API] 에러:', error instanceof Error ? error.message : error)
+    logger.error('[AI API] 에러:', error)
     // 실패 시 Firestore 업데이트
     await requestRef.update({
       status: 'failed',
@@ -207,21 +217,10 @@ export async function PATCH(request: NextRequest) {
     const db = getDb()
     const requestRef = db.collection('ai_write_requests').doc(id)
     const requestDoc = await requestRef.get()
-
-    if (!requestDoc.exists) {
-      return NextResponse.json(
-        { success: false, error: '요청을 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
+    requireResource(requestDoc.exists, '요청을 찾을 수 없습니다')
 
     const requestData = requestDoc.data()
-    if (requestData?.userId !== auth.userId) {
-      return NextResponse.json(
-        { success: false, error: '권한이 없습니다' },
-        { status: 403 }
-      )
-    }
+    requirePermission(auth.userId === requestData?.userId, '권한이 없습니다')
 
     await requestRef.update({ dismissed: true })
 
@@ -253,22 +252,11 @@ export async function DELETE(request: NextRequest) {
     const db = getDb()
     const requestRef = db.collection('ai_write_requests').doc(requestId)
     const requestDoc = await requestRef.get()
-
-    if (!requestDoc.exists) {
-      return NextResponse.json(
-        { success: false, error: '요청을 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
+    requireResource(requestDoc.exists, '요청을 찾을 수 없습니다')
 
     // 본인 요청인지 확인
     const requestData = requestDoc.data()
-    if (requestData?.userId !== auth.userId) {
-      return NextResponse.json(
-        { success: false, error: '권한이 없습니다' },
-        { status: 403 }
-      )
-    }
+    requirePermission(auth.userId === requestData?.userId, '권한이 없습니다')
 
     // 영구 삭제
     await requestRef.delete()

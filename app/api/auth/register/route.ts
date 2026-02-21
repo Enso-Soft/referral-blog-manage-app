@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { randomBytes } from 'crypto'
 import { getDb } from '@/lib/firebase-admin'
 import { verifyIdToken } from '@/lib/auth-admin'
+import { logger } from '@/lib/logger'
 
 // API 키 생성 함수
 function generateApiKey(): string {
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Register error:', error)
+    logger.error('Register error:', error)
     return NextResponse.json(
       { success: false, error: '등록에 실패했습니다' },
       { status: 500 }

@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { useAuth } from '@/components/AuthProvider'
+import { useAuth } from '@/components/layout/AuthProvider'
 
 export function useAuthFetch() {
   const { getAuthToken } = useAuth()

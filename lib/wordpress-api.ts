@@ -1,5 +1,7 @@
 import { extractImagesFromContent } from '@/lib/url-utils'
+import { toDate } from '@/lib/utils'
 import type { WPSitePublishData, WPPublishHistoryEntry } from '@/lib/schemas'
+import type { FirestoreUserData } from '@/lib/schemas/user'
 
 // --- WordPress 멀티사이트 데이터 정규화 ---
 
@@ -56,15 +58,7 @@ export function normalizeWordPressData(wp: Record<string, unknown> | undefined |
 }
 
 function timestampToMsHelper(ts: unknown): number {
-  if (!ts) return 0
-  if (ts instanceof Date) return ts.getTime()
-  if (typeof ts === 'object' && ts !== null) {
-    const obj = ts as Record<string, unknown>
-    if ('toDate' in obj && typeof obj.toDate === 'function') return (obj as { toDate: () => Date }).toDate().getTime()
-    if (typeof obj._seconds === 'number') return (obj._seconds as number) * 1000
-    if (typeof obj.seconds === 'number') return (obj.seconds as number) * 1000
-  }
-  return 0
+  return toDate(ts)?.getTime() ?? 0
 }
 
 /**
@@ -137,10 +131,10 @@ export interface WPSiteSummary {
  * - 못 찾으면 null
  */
 export function getWPConnectionFromUserData(
-  userData: Record<string, unknown>,
+  userData: FirestoreUserData,
   siteId?: string | null
 ): (WPConnection & { siteId: string; siteUrl: string }) | null {
-  const wpSites = userData.wpSites as Record<string, WPSiteInfo_DB> | undefined
+  const wpSites = userData.wpSites
 
   // 1. siteId로 직접 조회
   if (siteId && wpSites?.[siteId]) {
@@ -156,9 +150,9 @@ export function getWPConnectionFromUserData(
   // 2. 레거시 flat 필드 폴백
   if (userData.wpSiteUrl && userData.wpUsername && userData.wpAppPassword) {
     return {
-      siteUrl: userData.wpSiteUrl as string,
-      username: userData.wpUsername as string,
-      appPassword: userData.wpAppPassword as string,
+      siteUrl: userData.wpSiteUrl,
+      username: userData.wpUsername,
+      appPassword: userData.wpAppPassword,
       siteId: '__legacy__',
     }
   }
@@ -185,10 +179,10 @@ export function getWPConnectionFromUserData(
  * 레거시 flat 필드만 있으면 id: '__legacy__'로 포함.
  */
 export function getAllWPSitesFromUserData(
-  userData: Record<string, unknown>
+  userData: FirestoreUserData
 ): WPSiteSummary[] {
   const sites: WPSiteSummary[] = []
-  const wpSites = userData.wpSites as Record<string, WPSiteInfo_DB> | undefined
+  const wpSites = userData.wpSites
 
   if (wpSites) {
     for (const [id, site] of Object.entries(wpSites)) {
@@ -205,8 +199,8 @@ export function getAllWPSitesFromUserData(
   if (sites.length === 0 && userData.wpSiteUrl && userData.wpUsername && userData.wpAppPassword) {
     sites.push({
       id: '__legacy__',
-      siteUrl: userData.wpSiteUrl as string,
-      displayName: (userData.wpDisplayName as string) || undefined,
+      siteUrl: userData.wpSiteUrl,
+      displayName: userData.wpDisplayName || undefined,
     })
   }
 

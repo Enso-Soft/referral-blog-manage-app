@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
-import { handleApiError, requireAuth, requireResource } from '@/lib/api-error-handler'
+import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
+import { logger } from '@/lib/logger'
 
 const AI_API_URL = process.env.AI_EDITOR_API_URL || 'https://api.enso-soft.xyz/v1/ai/blog-editor'
 
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     requireAuth(auth)
 
     const body = await request.json()
-    const { postId, message, messageId, isRetry } = body
+    const { postId, message, messageId, isRetry, conversationHistory: clientHistory } = body
 
     if (!postId || !message?.trim()) {
       return NextResponse.json(
@@ -31,20 +32,24 @@ export async function POST(request: NextRequest) {
     requireResource(postDoc.exists, '글을 찾을 수 없습니다')
 
     const postData = postDoc.data()
-    if (postData?.userId !== auth.userId && !auth.isAdmin) {
-      return NextResponse.json(
-        { success: false, error: '이 글에 대한 권한이 없습니다' },
-        { status: 403 }
-      )
-    }
+    requirePermission(postData?.userId === auth.userId || auth.isAdmin, '이 글에 대한 권한이 없습니다')
 
-    // 대화 이력 가져오기 (컨텍스트 제공용)
+    // 대화 이력: 클라이언트에서 전송한 히스토리 우선 사용, 없으면 Firestore 폴백
     const conversationsRef = postRef.collection('conversations')
-    const conversationsSnap = await conversationsRef.orderBy('createdAt', 'asc').get()
-    const conversationHistory = conversationsSnap.docs.map(doc => ({
-      role: doc.data().role,
-      content: doc.data().content,
-    })).filter(msg => msg.content && msg.role) // 빈 메시지 필터링
+    let conversationHistory: { role: string; content: string }[]
+
+    if (Array.isArray(clientHistory) && clientHistory.length > 0) {
+      conversationHistory = clientHistory.filter(
+        (msg: { role?: string; content?: string }) => msg.content && msg.role
+      )
+    } else {
+      // Firestore 폴백 (하위 호환)
+      const conversationsSnap = await conversationsRef.orderBy('createdAt', 'asc').get()
+      conversationHistory = conversationsSnap.docs.map(doc => ({
+        role: doc.data().role,
+        content: doc.data().content,
+      })).filter(msg => msg.content && msg.role)
+    }
 
     // API 키 검증 (getAuthFromRequest에서 캐싱된 데이터 사용)
     const userApiKey = auth.apiKey
@@ -94,7 +99,7 @@ export async function POST(request: NextRequest) {
         contentUpdated: !!result.updatedContent,
       })
     } catch (apiError) {
-      console.error('AI API Error:', apiError)
+      logger.error('AI API Error:', apiError)
       return NextResponse.json({
         success: false,
         error: apiError instanceof Error ? apiError.message : 'AI 서버 연결에 실패했습니다',

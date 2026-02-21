@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ProductCard } from '@/components/ProductCard'
-import { AuthGuard } from '@/components/AuthGuard'
+import { ProductCard } from '@/components/product/ProductCard'
+import { AuthGuard } from '@/components/layout/AuthGuard'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { Loader2, AlertCircle, Package, Search, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface Product {
   id: string
@@ -157,20 +159,22 @@ function ProductList() {
       <div className="mb-4">
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-          <input
+          <Input
             type="text"
             placeholder="제품명, 브랜드, 스토어 검색..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-10 py-2.5 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder:text-muted-foreground"
+            className="w-full pl-10 pr-10 py-2.5"
           />
           {searchQuery && (
-            <button
+            <Button
+              variant="ghost"
+              size="icon-xs"
               onClick={() => setSearchQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X className="w-5 h-5" />
-            </button>
+            </Button>
           )}
         </div>
         {debouncedSearch && (
@@ -183,26 +187,22 @@ function ProductList() {
       {/* Category Filter */}
       {categoryStats.length > 0 && (
         <div className="flex gap-2 mb-6 flex-wrap">
-          <button
+          <Button
+            variant={categoryFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
             onClick={() => setCategoryFilter('all')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${categoryFilter === 'all'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground border border-border'
-              }`}
           >
             전체 ({total?.toLocaleString() || 0})
-          </button>
+          </Button>
           {categoryStats.map((cat) => (
-            <button
+            <Button
               key={cat.name}
+              variant={categoryFilter === cat.name ? 'default' : 'outline'}
+              size="sm"
               onClick={() => setCategoryFilter(cat.name)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${categoryFilter === cat.name
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground border border-border'
-                }`}
             >
               {cat.name} ({cat.count.toLocaleString()})
-            </button>
+            </Button>
           ))}
         </div>
       )}

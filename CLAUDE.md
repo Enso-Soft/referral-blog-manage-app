@@ -6,16 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Blog Editor App — a web application for managing and editing blog content. Provides HTML export for Tistory/Naver platforms, WordPress publishing, Threads SNS sharing, AI-powered writing/editing, SEO analysis, and affiliate product management.
 
+No separate backend server — Firebase Firestore serves as BaaS, and Next.js API Routes handle all server-side logic.
+
 ## Tech Stack
 
-- **Framework**: Next.js 14 (App Router)
-- **Styling**: Tailwind CSS, framer-motion (animations)
-- **Editor**: Monaco (HTML code editor)
-- **Database**: Firebase Firestore (Client SDK + Admin SDK)
+- **Framework**: Next.js 15 (App Router) — all pages are `'use client'` (CSR-only, no SSR)
+- **Language**: TypeScript 5.9 (strict mode, `moduleResolution: "bundler"`)
+- **UI**: shadcn/ui (New York style) + Radix UI primitives + CVA (class-variance-authority)
+- **Styling**: Tailwind CSS v4 (CSS-first config in `globals.css`, no `tailwind.config.ts`) + framer-motion (animations)
+- **Editor**: Monaco (`@monaco-editor/react`, dynamic import + `ssr: false`)
+- **Database**: Firebase Firestore (Client SDK v12 + Admin SDK v13)
 - **Auth**: Firebase Auth (Google OAuth)
-- **State**: TanStack Query (caching/mutations) + Firestore onSnapshot (realtime)
-- **Validation**: Zod
-- **Storage**: AWS S3 (image upload)
+- **State**: TanStack Query v5 (caching/mutations) + Firestore onSnapshot (realtime)
+- **Validation**: Zod v4 (runtime type validation + type inference)
+- **Storage**: AWS S3 (image upload via `@aws-sdk/client-s3` + `sharp` for resize/WebP)
 - **Deployment**: AWS Amplify
 
 ## Commands
@@ -38,9 +42,35 @@ npm run start    # Production server
 
 ## Architecture
 
+### Server/Client Boundary (`server-only`)
+
+Server-only files use `import 'server-only'` to prevent accidental client-side imports (build error if violated):
+
+| File | Server-only reason |
+|------|-------------------|
+| `lib/crypto.ts` | Node.js `crypto` module |
+| `lib/firebase-admin.ts` | `firebase-admin` SDK |
+| `lib/auth-admin.ts` | `firebase-admin/auth` |
+| `lib/api-helpers.ts` | `firebase-admin` + `crypto` |
+| `lib/env.ts` | Server environment variable validation |
+| `lib/file-validation.ts` | `Buffer` (Node.js) |
+| `lib/logger.ts` | Server-only logging |
+
+**Important**: `lib/wordpress-api.ts` is a mixed file — data normalization functions (`normalizeWordPressData`, `getOverallWPStatus`) are used by client components, while API call functions (`createWPPost`, `validateWPConnection`) are used by API routes. Do NOT add `server-only` to this file. Use `getDecryptedWPConnection()` from `lib/api-helpers.ts` instead of `getWPConnectionFromUserData()` in API routes to handle password decryption.
+
+### WordPress App Password Encryption
+
+WordPress app passwords are encrypted with AES-256-GCM before storing in Firestore.
+
+- `lib/crypto.ts` — `encrypt()`, `decrypt()`, `isEncrypted()` (prefix: `enc:iv:authTag:ciphertext`)
+- **Encrypt on save**: `app/api/settings/wordpress/route.ts` — POST handler + `migrateIfNeeded`
+- **Decrypt on read**: `lib/api-helpers.ts` — `getDecryptedWPConnection()` wraps `getWPConnectionFromUserData()` + `decrypt()`
+- **Backward compatible**: `decrypt()` returns plaintext as-is if not `enc:`-prefixed (legacy data)
+- Env var: `WP_ENCRYPTION_KEY` (32-byte hex, 64 chars)
+
 ### Provider Hierarchy
 
-Global providers are wrapped in `components/Providers.tsx`. Order matters:
+Global providers are wrapped in `components/layout/Providers.tsx`. Order matters:
 
 ```
 QueryProvider (TanStack Query)
@@ -49,6 +79,37 @@ QueryProvider (TanStack Query)
       └─ AuthProvider (Firebase Auth state, user profile, roles)
          └─ PostsProvider (Firestore realtime subscription)
 ```
+
+### Component Folder Structure
+
+Components are organized by domain:
+
+```
+components/
+├── ai/          # AIChatModal, AIWriterModal, AIRequestCard
+├── common/      # FloatingActionMenu, SlidePanel, Snackbar, QueryProvider
+├── layout/      # AuthGuard, AuthProvider, Header, Providers, ThemeProvider
+├── post/        # PostCard, PostEditor, PostViewer, CopyButton, HtmlCodeEditor
+├── product/     # ProductCard, ProductCombobox, ProductEditor
+├── seo/         # SeoAnalysisView, SeoBadges, TrendChart
+├── threads/     # ThreadsSection
+├── ui/          # shadcn/ui atomic components (Button, Dialog, Input, Sheet, etc.)
+└── wordpress/   # WordPressPanel, WPCategoryTree, WPPublishProgress, wp-helpers.ts
+```
+
+### Tailwind v4 Configuration
+
+No `tailwind.config.ts` — all config is in `app/globals.css` using CSS-first approach:
+
+```css
+@import 'tailwindcss';
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@plugin "@tailwindcss/typography";
+@custom-variant dark (&:where(.dark, .dark *));
+```
+
+Color tokens are defined as CSS Custom Properties (HSL) in `@layer base` (`:root` and `.dark`).
 
 ### Authentication (Dual Auth System)
 
@@ -62,19 +123,19 @@ QueryProvider (TanStack Query)
 - `getAuthFromRequest()` — Bearer token verification
 - `getAuthFromApiKey()` — X-API-Key header verification
 - `getAuthFromRequestOrApiKey()` — supports both (API Key takes priority)
-- `getUserRole()` / `isAdmin()` — checks role from Firestore `users` collection
+- `getUserRole()` / `isAdmin()` — checks role from Firestore `users` collection (in-memory cache, TTL 5min)
 
 ### Data Fetching (Dual Strategy)
 
 **Realtime subscriptions** (Firestore `onSnapshot`):
-- `context/PostsProvider.tsx` — post list (with filters)
+- `context/PostsProvider.tsx` — post list (with filters, pagination)
 - `hooks/useAIWriteRequests.ts` — detects AI request status changes
 
 **TanStack Query** (REST API-based):
-- `hooks/usePostsQuery.ts` — post list (cached)
 - `hooks/usePostQuery.ts` — single post query
 - `hooks/usePostMutations.ts` — CRUD mutations (optimistic updates)
 - `hooks/useAuthFetch.ts` — fetch wrapper with auto-attached auth token
+- Cache keys centralized in `lib/query-client.ts` (`queryKeys` constant)
 
 ### API Route Error Handling Pattern
 
@@ -98,6 +159,16 @@ export async function GET(request: NextRequest) {
 ```
 
 Custom error classes (`lib/errors.ts`): `AppError` → `ApiError`, `ValidationError`, `AuthError`, `NetworkError`
+
+### Shared API Route Helpers (`lib/api-helpers.ts`)
+
+- `getOwnedDocument(collection, docId, auth)` — Firestore doc fetch + ownership check (404/403)
+- `requireOwnership(data, auth)` — ownership-only check
+- `getDecryptedWPConnection(userData, siteId?)` — `getWPConnectionFromUserData()` + password decryption
+
+### Middleware (`middleware.ts`)
+
+Edge middleware applies CORS headers to `/api/public/*` routes only. Internal API routes have no CORS (same-origin only).
 
 ### Routes (Pages)
 
@@ -165,12 +236,18 @@ app/api/
 
 ### WordPress Publishing
 
-Publish, update, and delete posts to WordPress directly from the edit page.
+Publish, update, and delete posts to WordPress directly from the edit page. Supports multiple WordPress sites per user.
 
 **Architecture:**
-- `lib/wordpress-api.ts` — WordPress REST API client (publishing, image migration, category/tag management)
-- `components/WordPressPanel.tsx` — Publishing UI (inside SlidePanel)
-- Connection info stored in Firestore `users` collection (`wpSiteUrl`, `wpUsername`, `wpAppPassword`)
+- `lib/wordpress-api.ts` — WordPress REST API client (publishing, image migration, category/tag management) + data normalization (client-safe)
+- `components/wordpress/WordPressPanel.tsx` — Publishing UI (inside SlidePanel)
+- Connection info stored in Firestore `users.wpSites` map (keyed by siteId)
+- App passwords encrypted with AES-256-GCM (`lib/crypto.ts`)
+
+**Multi-site data structure:**
+- `users.wpSites.{siteId}` — `{ siteUrl, username, appPassword (encrypted), displayName, connectedAt }`
+- `blog_posts.wordpress.sites.{siteId}` — per-site publish state (`wpPostId`, `postStatus`, etc.)
+- Legacy flat fields (`wpSiteUrl`, `wpUsername`, `wpAppPassword`) auto-migrated to `wpSites` map
 
 **Publishing Flow:**
 1. Connect WordPress site on settings page (Application Password auth)
@@ -189,7 +266,7 @@ Share blog post summaries to Threads SNS.
 
 **Architecture:**
 - `lib/threads-api.ts` — Threads Graph API client (profile retrieval, container creation, publishing)
-- `components/ThreadsSection.tsx` — Threads content editor UI (inside SlidePanel)
+- `components/threads/ThreadsSection.tsx` — Threads content editor UI (inside SlidePanel)
 - OAuth token stored in Firestore `users` collection (`threadsAccessToken`, `threadsTokenExpiresAt`, `threadsUserId`)
 
 **Publishing Flow:**
@@ -211,7 +288,7 @@ Keyword research results from AI writing are saved in `blog_posts.seoAnalysis`.
 - Shopping data (`shoppingData`) — price range, product count (for product reviews)
 - Title options (`titleOptions`) — CTR-optimized title recommendations
 
-**Visualization:** `components/SeoAnalysisView.tsx` — renders analysis results on post detail page
+**Visualization:** `components/seo/SeoAnalysisView.tsx` — renders analysis results on post detail page
 
 ### Firestore Collections
 
@@ -220,16 +297,18 @@ Keyword research results from AI writing are saved in `blog_posts.seoAnalysis`.
 | `blog_posts` | Blog posts | `lib/schemas/post.ts` (BlogPost) |
 | `products` | Affiliate products | `lib/schemas/post.ts` |
 | `ai_write_requests` | AI writing requests | `lib/schemas/aiRequest.ts` |
-| `users` | User profile + API key + role + WP/Threads connection info | — |
+| `users` | User profile + API key + role + WP/Threads connection info | `lib/schemas/user.ts` |
 | `blog_posts/{id}/conversations` | AI chat history (subcollection) | — |
 
 **BlogPost Notable Fields:**
 - `seoAnalysis` — SEO keyword research analysis results
 - `threads` — Threads publish status/content (`ThreadsContentSchema`)
 - `wordpress` — WordPress publish status/settings/history (`WordPressContentSchema`)
+  - `wordpress.sites.{siteId}` — per-site publish data (multi-site support)
+  - `wordpress.publishHistory` — publish/update/delete history array
 
 **users Collection Integration Fields:**
-- WordPress: `wpSiteUrl`, `wpUsername`, `wpAppPassword`, `wpDisplayName`
+- WordPress: `wpSites.{siteId}.{ siteUrl, username, appPassword (encrypted), displayName, connectedAt }`
 - Threads: `threadsAccessToken`, `threadsTokenExpiresAt`, `threadsUserId`, `threadsUsername`
 
 **Index configuration:** see `firestore.indexes.json`
@@ -247,7 +326,7 @@ UI structure of the post edit page (`/posts/[id]/edit`):
 ### Image Upload
 
 1. Client → `/api/upload` (Bearer token auth)
-2. Server resizes/validates → uploads to S3 (`referral-blog-images` bucket)
+2. Server validates magic bytes (`lib/file-validation.ts`) + resizes with `sharp` → uploads to S3
 3. Returns S3 public URL → inserted into post HTML content
 4. On WordPress publishing, S3 images are auto-migrated to WP Media Library
 
@@ -255,14 +334,15 @@ UI structure of the post edit page (`/posts/[id]/edit`):
 
 See `.env.local` for environment variables.
 
-Server-side env vars are bundled at build time via the `env` property in `next.config.js` (Firebase, S3 related).
+Server-side env vars are bundled at build time via the `env` property in `next.config.js` (Firebase, S3, WP_ENCRYPTION_KEY).
 
 ### Amplify Deployment Env Var Caveat
 
-**Important**: When adding new server-side environment variables, you must configure them in two places:
+**Important**: When adding new server-side environment variables, you must configure them in **three places**:
 
-1. **Amplify Console** → Add to Environment variables
-2. **`amplify.yml`** file build commands:
+1. **`next.config.js`** → `env` object (build-time bundling)
+2. **Amplify Console** → Environment variables
+3. **`amplify.yml`** build commands:
 ```yaml
 build:
   commands:

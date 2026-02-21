@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
+import { z } from 'zod'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 import { UpdatePostSchema } from '@/lib/schemas'
@@ -10,21 +11,13 @@ import {
   requirePermission,
 } from '@/lib/api-error-handler'
 
-// Firestore 업데이트 데이터 타입
-type UpdateData = {
+// Firestore 업데이트 데이터 타입 (Zod 스키마에서 파생 + Firestore 고유 필드)
+type UpdateData = Partial<z.infer<typeof UpdatePostSchema>> & {
   updatedAt: FirebaseFirestore.Timestamp
-  content?: string
-  title?: string
-  status?: 'draft' | 'published'
-  metadata?: { originalPath?: string; wordCount: number }
-  products?: Array<{ name: string; affiliateLink: string }>
-  publishedUrl?: string
-  publishedUrls?: string[]
-  postType?: 'general' | 'affiliate'
-  seoAnalysis?: Record<string, unknown>
-  threads?: Record<string, unknown>
-  wordpress?: Record<string, unknown>
-} & { [key: string]: unknown }
+  // Firestore dot-notation 필드 (threads.xxx, wordpress.xxx)
+  [key: `threads.${string}`]: unknown
+  [key: `wordpress.${string}`]: unknown
+}
 
 // GET: 단일 포스트 조회
 export async function GET(

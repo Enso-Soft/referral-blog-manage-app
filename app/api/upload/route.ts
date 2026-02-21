@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { v4 as uuidv4 } from 'uuid'
+import { format } from 'date-fns'
 import { getAuthFromRequest } from '@/lib/auth-admin'
+import { validateImageBuffer } from '@/lib/file-validation'
+import { getS3Config } from '@/lib/env'
+import { handleApiError, requireAuth } from '@/lib/api-error-handler'
 
 const SUPPORTED_FORMATS = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']
 
-const s3Client = new S3Client({
-  region: process.env.S3_REGION || 'ap-northeast-2',
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
-  },
-})
+function createS3Client() {
+  const config = getS3Config()
+  return new S3Client({
+    region: config.region,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  })
+}
 
 function getExtension(mimeType: string): string {
   const map: Record<string, string> = {
@@ -28,12 +35,7 @@ export async function POST(request: NextRequest) {
   try {
     // 인증 확인
     const auth = await getAuthFromRequest(request)
-    if (!auth) {
-      return NextResponse.json(
-        { success: false, error: '인증이 필요합니다' },
-        { status: 401 }
-      )
-    }
+    requireAuth(auth)
 
     const formData = await request.formData()
     const file = formData.get('file') as File | null
@@ -63,8 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // S3 키 생성 (날짜 폴더 + UUID)
-    const now = new Date()
-    const dateFolder = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`
+    const dateFolder = format(new Date(), 'yyyy/MM')
     const uniqueId = uuidv4().slice(0, 8)
     const ext = getExtension(file.type)
     const s3Key = `blog/${dateFolder}/${uniqueId}${ext}`
@@ -73,13 +74,21 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
+    // Magic byte 검증 (MIME 위조 방지)
+    if (!validateImageBuffer(buffer, file.type)) {
+      return NextResponse.json(
+        { success: false, error: '파일 내용이 선언된 이미지 형식과 일치하지 않습니다' },
+        { status: 400 }
+      )
+    }
+
     // S3 업로드
-    const bucket = process.env.S3_BUCKET || 'referral-blog-images'
-    const region = process.env.S3_REGION || 'ap-northeast-2'
+    const s3Config = getS3Config()
+    const s3Client = createS3Client()
 
     await s3Client.send(
       new PutObjectCommand({
-        Bucket: bucket,
+        Bucket: s3Config.bucket,
         Key: s3Key,
         Body: buffer,
         ContentType: file.type,
@@ -87,7 +96,7 @@ export async function POST(request: NextRequest) {
     )
 
     // 퍼블릭 URL 생성
-    const url = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`
+    const url = `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${s3Key}`
 
     return NextResponse.json({
       success: true,
@@ -95,10 +104,6 @@ export async function POST(request: NextRequest) {
       s3Key,
     })
   } catch (error) {
-    console.error('S3 upload error:', error)
-    return NextResponse.json(
-      { success: false, error: '업로드에 실패했습니다' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

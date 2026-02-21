@@ -5,9 +5,11 @@ import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth } from '@/lib/api-error-handler'
 import {
   createWPPost, updateWPPost, deleteWPPost, checkWPPostExists,
-  migrateImagesToWP, getWPConnectionFromUserData,
+  migrateImagesToWP,
   normalizeWordPressData, getOverallWPStatus, getPrimaryPublishedUrl,
 } from '@/lib/wordpress-api'
+import { getDecryptedWPConnection } from '@/lib/api-helpers'
+import type { FirestoreUserData } from '@/lib/schemas/user'
 
 // GET: 기존 WP 글 존재 여부 확인 + 싱크
 export async function GET(request: NextRequest) {
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
       const updateObj: Record<string, unknown> = {}
 
       for (const [siteId, siteData] of entriesToCheck) {
-        const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, siteId)
+        const connResult = getDecryptedWPConnection(userData as FirestoreUserData, siteId)
         if (!connResult || !siteData.wpPostId) continue
 
         const exists = await checkWPPostExists(connResult, siteData.wpPostId)
@@ -110,7 +112,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: { exists: false } })
     }
 
-    const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, wpSiteId)
+    const connResult = getDecryptedWPConnection(userData as FirestoreUserData, wpSiteId)
     if (!connResult) {
       return NextResponse.json({ success: true, data: { exists: false } })
     }
@@ -182,7 +184,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, wpSiteId)
+    const connResult = getDecryptedWPConnection(userData as FirestoreUserData, wpSiteId)
     if (!connResult) {
       return NextResponse.json(
         { success: false, error: 'WordPress가 연결되어 있지 않습니다. 설정에서 연결해주세요.' },
@@ -400,7 +402,7 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, targetSiteId)
+    const connResult = getDecryptedWPConnection(userData as FirestoreUserData, targetSiteId)
     if (!connResult) {
       return NextResponse.json(
         { success: false, error: '이 글이 발행된 WordPress 사이트의 연결 정보를 찾을 수 없습니다. 사이트가 삭제되었을 수 있습니다.' },
@@ -564,7 +566,7 @@ export async function DELETE(request: NextRequest) {
     const userData = userDoc.data()
 
     if (userData) {
-      const connResult = getWPConnectionFromUserData(userData as Record<string, unknown>, targetSiteId)
+      const connResult = getDecryptedWPConnection(userData as FirestoreUserData, targetSiteId)
       if (connResult) {
         const conn = { siteUrl: connResult.siteUrl, username: connResult.username, appPassword: connResult.appPassword }
         try {

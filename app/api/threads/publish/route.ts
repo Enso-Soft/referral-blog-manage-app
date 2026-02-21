@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
-import { handleApiError, requireAuth } from '@/lib/api-error-handler'
+import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
 import {
   createThreadsContainer,
   publishThreadsContainer,
   waitForContainerReady,
 } from '@/lib/threads-api'
+import type { FirestoreUserData } from '@/lib/schemas/user'
 
 // POST: Threads에 포스팅
 export async function POST(request: NextRequest) {
@@ -27,22 +28,12 @@ export async function POST(request: NextRequest) {
 
     // 1. 블로그 글 조회
     const postDoc = await db.collection('blog_posts').doc(postId).get()
-    if (!postDoc.exists) {
-      return NextResponse.json(
-        { success: false, error: '게시글을 찾을 수 없습니다.' },
-        { status: 404 }
-      )
-    }
+    requireResource(postDoc.exists, '게시글을 찾을 수 없습니다.')
 
     const postData = postDoc.data()!
 
     // 소유권 확인
-    if (postData.userId !== auth.userId) {
-      return NextResponse.json(
-        { success: false, error: '이 게시글에 대한 권한이 없습니다.' },
-        { status: 403 }
-      )
-    }
+    requirePermission(postData.userId === auth.userId, '이 게시글에 대한 권한이 없습니다.')
 
     // threads 데이터 확인
     if (!postData.threads?.text) {
@@ -54,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // 2. 사용자 Threads 토큰 확인
     const userDoc = await db.collection('users').doc(auth.userId).get()
-    const userData = userDoc.data()
+    const userData = userDoc.data() as FirestoreUserData | undefined
 
     if (!userData?.threadsAccessToken) {
       return NextResponse.json(
@@ -72,8 +63,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const accessToken = userData.threadsAccessToken
-    const threadsUserId = userData.threadsUserId
+    const accessToken = userData.threadsAccessToken!
+    const threadsUserId = userData.threadsUserId!
 
     // 3. Threads 포스팅
     try {

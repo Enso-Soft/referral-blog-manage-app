@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { getAuthFromApiKey } from '@/lib/auth-admin'
+import { logger } from '@/lib/logger'
 
 const DOCS_DIR = join(process.cwd(), 'docs', 'api')
 const API_VERSION = '1.0.0'
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
       resources: [...AVAILABLE_RESOURCES],
     })
   } catch (error) {
-    console.error('Docs API error:', error)
+    logger.error('Docs API error:', error)
     return NextResponse.json(
       { success: false, error: 'API 문서 조회에 실패했습니다.' },
       { status: 500 }

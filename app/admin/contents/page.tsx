@@ -3,8 +3,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useAuth } from '@/components/AuthProvider'
+import { useAuth } from '@/components/layout/AuthProvider'
 import { ArrowLeft, Search, FileText, Trash2, Eye, EyeOff, ExternalLink } from 'lucide-react'
+import { formatDateFns } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface Content {
   id: string
@@ -142,11 +146,7 @@ export default function AdminContentsPage() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-'
-    return new Date(dateString).toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return formatDateFns(dateString, 'yyyy년 M월 d일')
   }
 
   if (authLoading) {
@@ -182,36 +182,34 @@ export default function AdminContentsPage() {
           <div className="flex-1 min-w-[200px]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-              <input
+              <Input
                 type="text"
                 placeholder="제목으로 검색..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 text-sm"
               />
             </div>
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">모든 상태</option>
-            <option value="draft">임시저장</option>
-            <option value="published">발행됨</option>
-          </select>
-          <select
-            value={authorFilter}
-            onChange={(e) => setAuthorFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">모든 작성자</option>
-            {authors.map((author) => (
-              <option key={author.id} value={author.id}>
-                {author.displayName || author.email}
-              </option>
-            ))}
-          </select>
+          <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">모든 상태</SelectItem>
+              <SelectItem value="draft">임시저장</SelectItem>
+              <SelectItem value="published">발행됨</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={authorFilter || 'all'} onValueChange={(v) => setAuthorFilter(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">모든 작성자</SelectItem>
+              {authors.map((author) => (
+                <SelectItem key={author.id} value={author.id}>
+                  {author.displayName || author.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -297,7 +295,9 @@ export default function AdminContentsPage() {
                         >
                           <ExternalLink className="w-4 h-4" />
                         </Link>
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() =>
                             handleUpdateStatus(
                               content.id,
@@ -305,11 +305,11 @@ export default function AdminContentsPage() {
                             )
                           }
                           disabled={updating === content.id}
-                          className={`p-2 rounded transition-colors disabled:opacity-50 ${
+                          className={
                             content.status === 'published'
                               ? 'text-gray-400 dark:text-gray-500 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30'
                               : 'text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30'
-                          }`}
+                          }
                           title={content.status === 'published' ? '임시저장으로' : '발행하기'}
                         >
                           {content.status === 'published' ? (
@@ -317,15 +317,17 @@ export default function AdminContentsPage() {
                           ) : (
                             <Eye className="w-4 h-4" />
                           )}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() => handleDelete(content.id, content.title)}
                           disabled={deleting === content.id}
-                          className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors disabled:opacity-50"
+                          className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
                           title="삭제"
                         >
                           <Trash2 className="w-4 h-4" />
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>

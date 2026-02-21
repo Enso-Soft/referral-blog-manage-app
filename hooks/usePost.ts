@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { getFirebaseDb } from '@/lib/firebase'
-import { useAuth } from '@/components/AuthProvider'
+import { useAuth } from '@/components/layout/AuthProvider'
 import type { BlogPost } from '@/lib/firestore'
 
 interface UsePostReturn {

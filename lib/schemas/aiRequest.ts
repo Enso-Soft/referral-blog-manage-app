@@ -183,7 +183,7 @@ export type AIWriteRequest = z.infer<typeof AIWriteRequestSchema>
 
 // 요청 생성용 입력 스키마 (웹앱 내부용)
 export const CreateAIWriteRequestSchema = z.object({
-  prompt: z.string().min(1, '프롬프트를 입력해주세요'),
+  prompt: z.string().min(1, '프롬프트를 입력해주세요').max(10000, '프롬프트는 10,000자를 초과할 수 없습니다'),
   images: z.array(z.string()).default([]),
   options: AIWriteOptionsSchema,
 })

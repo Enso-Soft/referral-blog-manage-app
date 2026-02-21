@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { ErrorFallback } from '@/components/ErrorBoundary'
+import { ErrorFallback } from '@/components/layout/ErrorBoundary'
 
 interface ErrorPageProps {
   error: Error & { digest?: string }

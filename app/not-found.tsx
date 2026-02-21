@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
 
 /**
  * 404 Not Found 페이지
@@ -34,12 +35,13 @@ export default function NotFound() {
           >
             홈으로 이동
           </Link>
-          <button
+          <Button
+            variant="outline"
             onClick={() => router.back()}
-            className="rounded-lg border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-transparent dark:text-gray-300 dark:hover:bg-gray-800"
+            className="px-6 py-3"
           >
             이전 페이지
-          </button>
+          </Button>
         </div>
       </div>
     </div>

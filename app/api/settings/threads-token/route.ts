@@ -4,6 +4,7 @@ import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth } from '@/lib/api-error-handler'
 import { getThreadsProfile, refreshThreadsToken } from '@/lib/threads-api'
+import type { FirestoreUserData } from '@/lib/schemas/user'
 
 // POST: Threads 토큰 저장
 export async function POST(request: NextRequest) {
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     const db = getDb()
     const userDoc = await db.collection('users').doc(auth.userId).get()
-    const userData = userDoc.data()
+    const userData = userDoc.data() as FirestoreUserData | undefined
 
     if (!userData?.threadsAccessToken) {
       return NextResponse.json({
@@ -121,7 +122,7 @@ export async function PATCH(request: NextRequest) {
 
     const db = getDb()
     const userDoc = await db.collection('users').doc(auth.userId).get()
-    const userData = userDoc.data()
+    const userData = userDoc.data() as FirestoreUserData | undefined
 
     if (!userData?.threadsAccessToken) {
       return NextResponse.json(

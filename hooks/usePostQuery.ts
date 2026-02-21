@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '@/components/AuthProvider'
+import { useAuth } from '@/components/layout/AuthProvider'
 import { queryKeys } from '@/lib/query-client'
 import type { BlogPost } from '@/lib/schemas'
 

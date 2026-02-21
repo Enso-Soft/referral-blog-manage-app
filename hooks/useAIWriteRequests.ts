@@ -14,8 +14,8 @@ import {
   type DocumentData,
 } from 'firebase/firestore'
 import { getFirebaseDb } from '@/lib/firebase'
-import { useAuth } from '@/components/AuthProvider'
-import type { AIWriteRequest, AIRequestStatus } from '@/lib/schemas/aiRequest'
+import { useAuth } from '@/components/layout/AuthProvider'
+import { AIWriteRequestSchema, type AIWriteRequest, type AIRequestStatus } from '@/lib/schemas/aiRequest'
 
 const ITEMS_PER_PAGE = 10
 
@@ -71,10 +71,16 @@ export function useAIWriteRequests(): UseAIWriteRequestsReturn {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const newRequests = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as AIWriteRequest[]
+        const newRequests = snapshot.docs.map((doc) => {
+          const data = { id: doc.id, ...doc.data() }
+          if (process.env.NODE_ENV === 'development') {
+            const result = AIWriteRequestSchema.safeParse(data)
+            if (!result.success) {
+              console.warn(`[useAIWriteRequests] Validation failed for doc ${doc.id}:`, result.error.flatten().fieldErrors)
+            }
+          }
+          return data
+        }) as AIWriteRequest[]
 
         // 새로 완료된 요청 감지
         const currentPendingIds = new Set(
@@ -157,37 +163,6 @@ export function useAIWriteRequests(): UseAIWriteRequestsReturn {
   }
 }
 
-// 상대 시간 포맷 유틸
-export function formatRelativeTime(timestamp: unknown): string {
-  let date: Date
-
-  if (timestamp && typeof timestamp === 'object') {
-    if ('toDate' in timestamp && typeof (timestamp as { toDate: () => Date }).toDate === 'function') {
-      date = (timestamp as { toDate: () => Date }).toDate()
-    } else if ('_seconds' in timestamp) {
-      date = new Date((timestamp as { _seconds: number })._seconds * 1000)
-    } else if ('seconds' in timestamp) {
-      date = new Date((timestamp as { seconds: number }).seconds * 1000)
-    } else {
-      return ''
-    }
-  } else if (timestamp instanceof Date) {
-    date = timestamp
-  } else {
-    return ''
-  }
-
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHour = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHour / 24)
-
-  if (diffSec < 60) return '방금 전'
-  if (diffMin < 60) return `${diffMin}분 전`
-  if (diffHour < 24) return `${diffHour}시간 전`
-  if (diffDay < 7) return `${diffDay}일 전`
-
-  return date.toLocaleDateString('ko-KR')
-}
+// 상대 시간 포맷 유틸 — date-fns 기반으로 마이그레이션됨
+// 기존 import 호환을 위해 re-export
+export { formatRelativeTimeFns as formatRelativeTime } from '@/lib/utils'

@@ -1,25 +1,26 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type RefCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type RefCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // 애니메이션 설정 상수
 const LAYOUT_ANIMATION_THRESHOLD = 12 // 이 개수 이상이면 layout 애니메이션 비활성화
-import { PostCard } from '@/components/PostCard'
-import { AuthGuard } from '@/components/AuthGuard'
-import { AIWriterModal } from '@/components/AIWriterModal'
-import { AIRequestSection } from '@/components/AIRequestCard'
+import { PostCard } from '@/components/post/PostCard'
+import { AuthGuard } from '@/components/layout/AuthGuard'
+import { AIWriterModal } from '@/components/ai/AIWriterModal'
+import { AIRequestSection } from '@/components/ai/AIRequestCard'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { usePosts } from '@/hooks/usePosts'
 import { useAIWriteRequests } from '@/hooks/useAIWriteRequests'
 import { Loader2, AlertCircle, FileX, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { AIWriteRequest } from '@/lib/schemas/aiRequest'
 
 type StatusFilter = 'all' | 'draft' | 'published'
 
 function PostList() {
-  const { posts, loading, error, filter, setFilter, typeFilter, setTypeFilter, scrollPosition, setScrollPosition, loadingMore, hasMore, loadMore } = usePosts()
+  const { posts, loading, error, filter, setFilter, typeFilter, setTypeFilter, loadingMore, hasMore, loadMore } = usePosts()
   const { authFetch } = useAuthFetch()
   const { requests: aiRequests, loading: aiRequestsLoading, hasMore: aiHasMore, loadMore: aiLoadMore, latestCompletedRequest, clearLatestCompleted } = useAIWriteRequests()
   const [isAIModalOpen, setIsAIModalOpen] = useState(false)
@@ -121,19 +122,28 @@ function PostList() {
     setRetryData(null)
   }, [])
 
-  // Scroll restoration
-  useLayoutEffect(() => {
-    if (!loading && scrollPosition > 0) {
-      window.scrollTo(0, scrollPosition)
+  // 포스트 클릭 시 스크롤 위치 저장 (캡처 단계에서 네비게이션 전에 기록)
+  const handleSaveScroll = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button')) return
+    sessionStorage.setItem('list-scroll-pos', String(window.scrollY))
+  }, [])
+
+  // 스크롤 위치 복원 (sessionStorage 기반)
+  useEffect(() => {
+    if (!loading) {
+      const saved = sessionStorage.getItem('list-scroll-pos')
+      if (saved) {
+        sessionStorage.removeItem('list-scroll-pos')
+        const pos = parseInt(saved, 10)
+        if (pos > 0) {
+          requestAnimationFrame(() => {
+            window.scrollTo(0, pos)
+          })
+        }
+      }
     }
   }, [loading])
-
-  // Save scroll position on unmount
-  useEffect(() => {
-    return () => {
-      setScrollPosition(window.scrollY)
-    }
-  }, [setScrollPosition])
 
   const handleStatusChange = useCallback(async (postId: string, newStatus: 'draft' | 'published'): Promise<boolean> => {
     try {
@@ -170,16 +180,13 @@ function PostList() {
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">블로그 글 목록</h1>
           <p className="text-muted-foreground mt-2 text-lg">블로그 콘텐츠를 관리하고 편집합니다.</p>
         </div>
-        <button
+        <Button
           onClick={() => setIsAIModalOpen(true)}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white
-                     bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500
-                     hover:from-violet-600 hover:via-purple-600 hover:to-fuchsia-600
-                     shadow-lg hover:shadow-xl transition-all hover:scale-105"
+          className="rounded-xl font-semibold px-5 py-2.5 h-auto bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 hover:from-violet-600 hover:via-purple-600 hover:to-fuchsia-600 shadow-lg hover:shadow-xl transition-all hover:scale-105"
         >
           <Sparkles className="w-4 h-4" />
           AI로 작성
-        </button>
+        </Button>
       </div>
 
       {/* AI Request Section + Filters Container */}
@@ -210,36 +217,40 @@ function PostList() {
         {/* Type Filter */}
         <div className="flex items-center gap-2 p-1 bg-secondary/50 rounded-xl w-fit">
           {(['all', 'general', 'affiliate'] as const).map((type) => (
-            <button
+            <Button
               key={type}
+              variant="ghost"
+              size="sm"
               onClick={() => setTypeFilter(type)}
               className={cn(
-                "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 capitalize",
+                "rounded-lg capitalize",
                 typeFilter === type
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-sm hover:bg-background"
                   : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}
             >
               {type === 'all' ? '전체 글' : type === 'general' ? '일반' : '제휴'}
-            </button>
+            </Button>
           ))}
         </div>
 
         {/* Status Filter */}
         <div className="flex items-center gap-2 p-1 bg-secondary/50 rounded-xl w-fit">
           {(['all', 'draft', 'published'] as const).map((status) => (
-            <button
+            <Button
               key={status}
+              variant="ghost"
+              size="sm"
               onClick={() => setFilter(status)}
               className={cn(
-                "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 capitalize",
+                "rounded-lg capitalize",
                 filter === status
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-sm hover:bg-background"
                   : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}
             >
               {status === 'all' ? '전체 상태' : status === 'draft' ? '초안' : '발행됨'}
-            </button>
+            </Button>
           ))}
         </div>
         </div>
@@ -278,7 +289,7 @@ function PostList() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div onClickCapture={handleSaveScroll} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <AnimatePresence mode="popLayout">
               {posts.map((post) => (
                 <motion.div

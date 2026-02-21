@@ -1,6 +1,8 @@
+import 'server-only'
 import { getAuth } from 'firebase-admin/auth'
 import { getApps, initializeApp, cert, type ServiceAccount } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { logger } from '@/lib/logger'
 
 // Firebase Admin 초기화 (중복 초기화 방지)
 function ensureAdminInitialized() {
@@ -43,6 +45,19 @@ export async function verifyIdToken(token: string) {
 // 사용자 데이터 캐시 (역할 + API 키)
 const userDataCache = new Map<string, { role: 'admin' | 'user'; apiKey?: string; expiry: number }>()
 const CACHE_TTL = 5 * 60 * 1000 // 5분
+const MAX_CACHE_SIZE = 1000
+const EVICT_COUNT = 100
+
+/** 캐시가 최대 크기를 초과하면 가장 오래된 엔트리를 제거 */
+function evictCacheIfNeeded() {
+  if (userDataCache.size < MAX_CACHE_SIZE) return
+  let removed = 0
+  for (const key of userDataCache.keys()) {
+    if (removed >= EVICT_COUNT) break
+    userDataCache.delete(key)
+    removed++
+  }
+}
 
 async function getCachedUserData(userId: string): Promise<{ role: 'admin' | 'user'; apiKey?: string }> {
   const cached = userDataCache.get(userId)
@@ -57,6 +72,7 @@ async function getCachedUserData(userId: string): Promise<{ role: 'admin' | 'use
   const role = userDoc.exists && userDoc.data()?.role === 'admin' ? 'admin' : 'user'
   const apiKey = userDoc.exists ? userDoc.data()?.apiKey : undefined
 
+  evictCacheIfNeeded()
   userDataCache.set(userId, { role, apiKey, expiry: Date.now() + CACHE_TTL })
   return { role, apiKey }
 }
@@ -98,7 +114,7 @@ export async function getAuthFromRequest(request: Request): Promise<{
       apiKey,
     }
   } catch (error) {
-    console.error('Token verification failed:', error)
+    logger.error('Token verification failed:', error)
     return null
   }
 }
@@ -142,7 +158,7 @@ export async function getAuthFromApiKey(request: Request): Promise<{
       apiKey,
     }
   } catch (error) {
-    console.error('API Key verification failed:', error)
+    logger.error('API Key verification failed:', error)
     return null
   }
 }

@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Input } from '@/components/ui/input'
 import { useRouter } from 'next/navigation'
-import { doc, getDoc } from 'firebase/firestore'
-import { getFirebaseDb } from '@/lib/firebase'
-import { useAuth } from '@/components/AuthProvider'
-import { Copy, RefreshCw, Check, Key, Loader2, AlertTriangle, X, AtSign, Link2, Unlink, Clock, Globe } from 'lucide-react'
+import { useAuth } from '@/components/layout/AuthProvider'
+import { Copy, RefreshCw, Check, Key, Loader2, AlertTriangle, AtSign, Link2, Unlink, Globe } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -51,64 +52,39 @@ export default function SettingsPage() {
       return
     }
 
-    // Fetch API key from Firestore
-    const fetchApiKey = async () => {
-      try {
-        const userDoc = await getDoc(doc(getFirebaseDb(), 'users', user.uid))
-        if (userDoc.exists()) {
-          setApiKey(userDoc.data().apiKey || null)
-        }
-      } catch (error) {
-        console.error('Failed to fetch API key:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchApiKey()
-
-    // Fetch Threads status
-    const fetchThreadsStatus = async () => {
+    // 통합 프로필 조회 (API Key + Threads + WordPress 한 번에)
+    const fetchProfile = async () => {
       try {
         const token = await getAuthToken()
-        const res = await fetch('/api/settings/threads-token', {
+        const res = await fetch('/api/settings/profile', {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         const data = await res.json()
         if (data.success && data.data) {
-          setThreadsConnected(data.data.connected)
-          setThreadsUsername(data.data.username || null)
-          setThreadsExpiresAt(data.data.expiresAt || null)
-          setThreadsDaysLeft(data.data.daysLeft ?? null)
+          // API Key
+          setApiKey(data.data.apiKey || null)
+          // Threads
+          if (data.data.threads) {
+            setThreadsConnected(data.data.threads.connected)
+            setThreadsUsername(data.data.threads.username || null)
+            setThreadsExpiresAt(data.data.threads.expiresAt || null)
+            setThreadsDaysLeft(data.data.threads.daysLeft ?? null)
+          }
+          // WordPress
+          if (data.data.wpSites) {
+            setWpSites(data.data.wpSites)
+          }
         }
       } catch (error) {
-        console.error('Failed to fetch Threads status:', error)
+        console.error('Failed to fetch profile:', error)
       } finally {
+        setLoading(false)
         setThreadsLoading(false)
-      }
-    }
-
-    fetchThreadsStatus()
-
-    // Fetch WordPress sites
-    const fetchWpStatus = async () => {
-      try {
-        const token = await getAuthToken()
-        const res = await fetch('/api/settings/wordpress', {
-          headers: { 'Authorization': `Bearer ${token}` },
-        })
-        const data = await res.json()
-        if (data.success && data.data?.sites) {
-          setWpSites(data.data.sites)
-        }
-      } catch (error) {
-        console.error('Failed to fetch WordPress status:', error)
-      } finally {
         setWpLoading(false)
       }
     }
 
-    fetchWpStatus()
+    fetchProfile()
   }, [user, authLoading, router, getAuthToken])
 
   // WordPress URL 실시간 감지 (debounce 800ms)
@@ -355,7 +331,9 @@ export default function SettingsPage() {
               <code className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg font-mono text-sm text-gray-800 dark:text-gray-200 break-all">
                 {apiKey}
               </code>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={handleCopy}
                 className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 title="복사"
@@ -365,7 +343,7 @@ export default function SettingsPage() {
                 ) : (
                   <Copy className="w-5 h-5" />
                 )}
-              </button>
+              </Button>
             </div>
 
             {/* 재발급 안내 */}
@@ -376,26 +354,28 @@ export default function SettingsPage() {
               </p>
             </div>
 
-            <button
+            <Button
+              variant="outline"
               onClick={() => setShowConfirmModal(true)}
               disabled={regenerating}
               className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
               {regenerating ? '재발급 중...' : 'API 키 재발급'}
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="text-gray-500 dark:text-gray-400">
             API 키가 없습니다. 재발급 버튼을 눌러 생성하세요.
-            <button
+            <Button
+              variant="default"
               onClick={() => setShowConfirmModal(true)}
               disabled={regenerating}
               className="mt-4 flex items-center gap-2 px-4 py-2 text-sm text-white bg-gray-900 dark:bg-gray-100 dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
               <Key className="w-4 h-4" />
               {regenerating ? '발급 중...' : 'API 키 발급'}
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -447,21 +427,23 @@ export default function SettingsPage() {
 
             {/* 버튼 */}
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                variant="outline"
                 onClick={handleThreadsRefresh}
                 disabled={threadsRefreshing}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={`w-4 h-4 ${threadsRefreshing ? 'animate-spin' : ''}`} />
                 {threadsRefreshing ? '갱신 중...' : '토큰 갱신'}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="destructive"
                 onClick={() => setShowDisconnectModal(true)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors bg-transparent dark:bg-transparent"
               >
                 <Unlink className="w-4 h-4" />
                 연결 해제
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -474,7 +456,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <input
+              <Input
                 type="password"
                 value={threadsToken}
                 onChange={(e) => {
@@ -482,9 +464,10 @@ export default function SettingsPage() {
                   setThreadsError('')
                 }}
                 placeholder="Threads Access Token"
-                className="flex-1 px-4 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 py-2.5"
               />
-              <button
+              <Button
+                variant="default"
                 onClick={handleThreadsSave}
                 disabled={threadsSaving || !threadsToken.trim()}
                 className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50"
@@ -495,7 +478,7 @@ export default function SettingsPage() {
                   <Link2 className="w-4 h-4" />
                 )}
                 {threadsSaving ? '연결 중...' : '연결'}
-              </button>
+              </Button>
             </div>
 
             {threadsError && (
@@ -535,13 +518,15 @@ export default function SettingsPage() {
                     {site.siteUrl}
                   </p>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={() => setShowWpDisconnectModal(site.id)}
                   className="p-1.5 text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0"
                   title="연결 해제"
                 >
                   <Unlink className="w-4 h-4" />
-                </button>
+                </Button>
               </div>
             ))}
 
@@ -566,7 +551,7 @@ export default function SettingsPage() {
                 <div className="space-y-3">
                   <div>
                     <div className="relative">
-                      <input
+                      <Input
                         type="text"
                         value={wpInputSiteUrl}
                         onChange={(e) => { setWpInputSiteUrl(e.target.value); setWpError('') }}
@@ -576,10 +561,10 @@ export default function SettingsPage() {
                           }
                         }}
                         placeholder="https://your-wordpress-site.com"
-                        className={`w-full px-4 py-2.5 pr-10 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        className={`py-2.5 pr-10 ${
                           wpDetected === true ? 'border-green-500 dark:border-green-500' :
                           wpDetected === false ? 'border-red-400 dark:border-red-500' :
-                          'border-gray-300 dark:border-gray-600'
+                          ''
                         }`}
                       />
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -598,24 +583,25 @@ export default function SettingsPage() {
                       <p className="mt-1.5 text-xs text-red-500">{wpDetectError}</p>
                     )}
                   </div>
-                  <input
+                  <Input
                     type="text"
                     value={wpInputUsername}
                     onChange={(e) => { setWpInputUsername(e.target.value); setWpError('') }}
                     placeholder="WordPress 사용자명"
-                    className="w-full px-4 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="py-2.5"
                   />
-                  <input
+                  <Input
                     type="password"
                     value={wpInputAppPassword}
                     onChange={(e) => { setWpInputAppPassword(e.target.value); setWpError('') }}
                     placeholder="Application Password"
-                    className="w-full px-4 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="py-2.5"
                   />
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
+                    variant="default"
                     onClick={handleWpSave}
                     disabled={wpSaving || !wpInputSiteUrl.trim() || !wpInputUsername.trim() || !wpInputAppPassword.trim()}
                     className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50"
@@ -626,9 +612,10 @@ export default function SettingsPage() {
                       <Link2 className="w-4 h-4" />
                     )}
                     {wpSaving ? '연결 중...' : '연결'}
-                  </button>
+                  </Button>
                   {wpSites.length > 0 && (
-                    <button
+                    <Button
+                      variant="outline"
                       onClick={() => {
                         setShowWpAddForm(false)
                         setWpInputSiteUrl('')
@@ -642,7 +629,7 @@ export default function SettingsPage() {
                       className="px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                     >
                       취소
-                    </button>
+                    </Button>
                   )}
                 </div>
 
@@ -651,169 +638,76 @@ export default function SettingsPage() {
                 )}
               </div>
             ) : (
-              <button
+              <Button
+                variant="outline"
                 onClick={() => setShowWpAddForm(true)}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <Globe className="w-4 h-4" />
                 WordPress 사이트 추가
-              </button>
+              </Button>
             )}
           </div>
         )}
       </div>
 
       {/* 재발급 확인 모달 */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowConfirmModal(false)}
-          />
-          <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-6">
-            <button
-              onClick={() => setShowConfirmModal(false)}
-              className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/30">
-                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                API 키 재발급
-              </h3>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                정말 API 키를 재발급하시겠습니까?
-              </p>
-              <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-500 mt-0.5">&#8226;</span>
-                  기존 키는 즉시 무효화되며 복구할 수 없습니다.
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-500 mt-0.5">&#8226;</span>
-                  AI 글 작성이 진행 중인 경우 진행 상태가 누락될 수 있습니다.
-                </li>
-              </ul>
-            </div>
-
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleRegenerate}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-              >
-                재발급
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={showConfirmModal} onOpenChange={(open) => { if (!open) setShowConfirmModal(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>API 키 재발급</DialogTitle>
+            <DialogDescription>정말 API 키를 재발급하시겠습니까?</DialogDescription>
+          </DialogHeader>
+          <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
+            <li className="flex items-start gap-2">
+              <span className="text-amber-500 mt-0.5">&#8226;</span>
+              기존 키는 즉시 무효화되며 복구할 수 없습니다.
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-amber-500 mt-0.5">&#8226;</span>
+              AI 글 작성이 진행 중인 경우 진행 상태가 누락될 수 있습니다.
+            </li>
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>취소</Button>
+            <Button variant="destructive" onClick={handleRegenerate}>재발급</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Threads 연결 해제 확인 모달 */}
-      {showDisconnectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowDisconnectModal(false)}
-          />
-          <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-6">
-            <button
-              onClick={() => setShowDisconnectModal(false)}
-              className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/30">
-                <Unlink className="w-5 h-5 text-red-600 dark:text-red-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Threads 연결 해제
-              </h3>
-            </div>
-
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-              Threads 연결을 해제하면 더 이상 자동 포스팅이 불가능합니다. 계속하시겠습니까?
-            </p>
-
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowDisconnectModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleThreadsDisconnect}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-              >
-                연결 해제
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={showDisconnectModal} onOpenChange={(open) => { if (!open) setShowDisconnectModal(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Threads 연결 해제</DialogTitle>
+            <DialogDescription>Threads 연결을 해제하면 더 이상 자동 포스팅이 불가능합니다. 계속하시겠습니까?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDisconnectModal(false)}>취소</Button>
+            <Button variant="destructive" onClick={handleThreadsDisconnect}>연결 해제</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* WordPress 연결 해제 확인 모달 */}
-      {showWpDisconnectModal && (() => {
-        const targetSite = wpSites.find(s => s.id === showWpDisconnectModal)
+      {(() => {
+        const targetSite = showWpDisconnectModal ? wpSites.find(s => s.id === showWpDisconnectModal) : null
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setShowWpDisconnectModal(null)}
-            />
-            <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-6">
-              <button
-                onClick={() => setShowWpDisconnectModal(null)}
-                className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/30">
-                  <Unlink className="w-5 h-5 text-red-600 dark:text-red-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  WordPress 연결 해제
-                </h3>
-              </div>
-
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                {targetSite?.displayName || targetSite?.siteUrl || 'WordPress'} 연결을 해제하시겠습니까?
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">
+          <Dialog open={!!showWpDisconnectModal} onOpenChange={(open) => { if (!open) setShowWpDisconnectModal(null) }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>WordPress 연결 해제</DialogTitle>
+                <DialogDescription>
+                  {targetSite?.displayName || targetSite?.siteUrl || 'WordPress'} 연결을 해제하시겠습니까?
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 이 사이트로 발행된 기존 글에는 영향이 없지만, 더 이상 이 사이트로 발행할 수 없게 됩니다.
               </p>
-
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setShowWpDisconnectModal(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={() => handleWpDisconnect(showWpDisconnectModal)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-                >
-                  연결 해제
-                </button>
-              </div>
-            </div>
-          </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowWpDisconnectModal(null)}>취소</Button>
+                <Button variant="destructive" onClick={() => showWpDisconnectModal && handleWpDisconnect(showWpDisconnectModal)}>연결 해제</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )
       })()}
     </div>

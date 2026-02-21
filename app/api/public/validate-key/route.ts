@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthFromApiKey } from '@/lib/auth-admin'
+import { logger } from '@/lib/logger'
 
 // GET: API 키 유효성 검증
 export async function GET(request: NextRequest) {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('API key validation error:', error)
+    logger.error('API key validation error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error.' },
       { status: 500 }

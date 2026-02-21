@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { AppError, ApiError, ValidationError, AuthError } from './errors'
+import { logger } from './logger'
 
 /**
  * API 응답 타입
@@ -53,7 +54,7 @@ export function errorResponse(
  * 에러를 API 응답으로 변환
  */
 export function handleApiError(error: unknown): NextResponse<ApiErrorResponse> {
-  console.error('API Error:', error)
+  logger.error('API Error:', error)
 
   // Zod 검증 에러
   if (error instanceof ZodError) {
@@ -141,6 +142,15 @@ export function requirePermission(
   if (!hasPermission) {
     throw ApiError.forbidden(message)
   }
+}
+
+/**
+ * 관리자 권한 확인 유틸리티
+ * 인증 + 관리자 권한을 한 번에 체크
+ */
+export function requireAdmin<T extends { isAdmin: boolean }>(auth: T | null): asserts auth is T {
+  requireAuth(auth)
+  requirePermission(auth.isAdmin, '관리자 권한이 필요합니다')
 }
 
 export type { ApiResponse, ApiSuccessResponse, ApiErrorResponse }

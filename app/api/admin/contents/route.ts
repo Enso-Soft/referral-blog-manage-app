@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
+import { handleApiError, requireAdmin } from '@/lib/api-error-handler'
 
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthFromRequest(request)
-    if (!auth || !auth.isAdmin) {
-      return NextResponse.json(
-        { success: false, error: '관리자 권한이 필요합니다' },
-        { status: 403 }
-      )
-    }
+    requireAdmin(auth)
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || ''
@@ -106,10 +102,6 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('GET contents error:', error)
-    return NextResponse.json(
-      { success: false, error: '콘텐츠 목록 조회에 실패했습니다' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

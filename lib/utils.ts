@@ -1,8 +1,10 @@
-import { type ClassValue, clsx } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+import { format, formatDistanceToNow, addHours } from 'date-fns'
+import { ko } from 'date-fns/locale'
 
 export function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs))
 }
 
 /**
@@ -11,37 +13,53 @@ export function cn(...inputs: ClassValue[]) {
  * @param options 포맷 옵션 (시간 포함 여부)
  */
 export function formatDate(
-    timestamp: any,
+    timestamp: unknown,
     options: { includeTime?: boolean } = {}
 ): string {
-    if (!timestamp) return ''
+    const date = toDate(timestamp)
+    if (!date) return ''
 
-    let date: Date
-    if (timestamp._seconds) {
-        date = new Date(timestamp._seconds * 1000)
-    } else if (timestamp.seconds) {
-        date = new Date(timestamp.seconds * 1000)
-    } else if (typeof timestamp.toDate === 'function') {
-        date = timestamp.toDate()
-    } else {
-        date = new Date(timestamp)
-    }
-
-    if (isNaN(date.getTime())) return ''
-
-    const formatOptions: Intl.DateTimeFormatOptions = {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    }
-
-    if (options.includeTime) {
-        formatOptions.hour = '2-digit'
-        formatOptions.minute = '2-digit'
-    }
-
-    return new Intl.DateTimeFormat('ko-KR', formatOptions).format(date)
+    const formatStr = options.includeTime ? 'yyyy년 M월 d일 HH:mm' : 'yyyy년 M월 d일'
+    return format(date, formatStr, { locale: ko })
 }
+
+/**
+ * Firestore Timestamp → Date 변환 (공통 헬퍼)
+ */
+export function toDate(timestamp: unknown): Date | null {
+    if (!timestamp) return null
+    if (timestamp instanceof Date) return timestamp
+    const ts = timestamp as Record<string, unknown>
+    if (ts._seconds) return new Date((ts._seconds as number) * 1000)
+    if (ts.seconds) return new Date((ts.seconds as number) * 1000)
+    if (typeof ts.toDate === 'function') return (ts as { toDate: () => Date }).toDate()
+    const d = new Date(timestamp as string | number)
+    return isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * date-fns 기반 날짜 포맷 (한국어)
+ */
+export function formatDateFns(
+    timestamp: unknown,
+    formatStr: string = 'yyyy년 M월 d일'
+): string {
+    const date = toDate(timestamp)
+    if (!date) return ''
+    return format(date, formatStr, { locale: ko })
+}
+
+/**
+ * 상대 시간 포맷 ("3시간 전", "2일 전")
+ */
+export function formatRelativeTimeFns(timestamp: unknown): string {
+    const date = toDate(timestamp)
+    if (!date) return ''
+    return formatDistanceToNow(date, { addSuffix: true, locale: ko })
+}
+
+export { format, formatDistanceToNow, addHours } from 'date-fns'
+export { ko as koLocale } from 'date-fns/locale'
 
 /**
  * 함수 호출을 지정된 시간 간격으로 제한

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
+import { handleApiError, requireAdmin, requireResource } from '@/lib/api-error-handler'
 
 export async function PATCH(
   request: NextRequest,
@@ -8,12 +9,7 @@ export async function PATCH(
 ) {
   try {
     const auth = await getAuthFromRequest(request)
-    if (!auth || !auth.isAdmin) {
-      return NextResponse.json(
-        { success: false, error: '관리자 권한이 필요합니다' },
-        { status: 403 }
-      )
-    }
+    requireAdmin(auth)
 
     const { id } = await params
     const body = await request.json()
@@ -46,12 +42,7 @@ export async function PATCH(
     const userRef = db.collection('users').doc(id)
     const userDoc = await userRef.get()
 
-    if (!userDoc.exists) {
-      return NextResponse.json(
-        { success: false, error: '사용자를 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
+    requireResource(userDoc.exists ? userDoc : null, '사용자를 찾을 수 없습니다')
 
     const updateData: Record<string, string> = {}
     if (role) updateData.role = role
@@ -71,10 +62,6 @@ export async function PATCH(
       message: '사용자 정보가 업데이트되었습니다',
     })
   } catch (error) {
-    console.error('PATCH user error:', error)
-    return NextResponse.json(
-      { success: false, error: '사용자 수정에 실패했습니다' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

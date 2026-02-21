@@ -2,6 +2,34 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequestOrApiKey, getAuthFromApiKey } from '@/lib/auth-admin'
+import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
+
+// 카테고리 통계 인메모리 캐시 (per-user, 60초 TTL)
+const CATEGORY_CACHE_TTL = 60 * 1000 // 60초
+const MAX_CATEGORY_CACHE_SIZE = 200
+const categoryStatsCache = new Map<string, { data: { name: string; count: number }[]; expiry: number }>()
+
+function getCategoryStatsFromCache(userId: string): { name: string; count: number }[] | null {
+  const cached = categoryStatsCache.get(userId)
+  if (cached && Date.now() < cached.expiry) {
+    return cached.data
+  }
+  categoryStatsCache.delete(userId)
+  return null
+}
+
+function setCategoryStatsCache(userId: string, data: { name: string; count: number }[]) {
+  // 최대 크기 초과 시 가장 오래된 엔트리 제거
+  if (categoryStatsCache.size >= MAX_CATEGORY_CACHE_SIZE) {
+    const firstKey = categoryStatsCache.keys().next().value
+    if (firstKey) categoryStatsCache.delete(firstKey)
+  }
+  categoryStatsCache.set(userId, { data, expiry: Date.now() + CATEGORY_CACHE_TTL })
+}
+
+function invalidateCategoryStatsCache(userId: string) {
+  categoryStatsCache.delete(userId)
+}
 
 // 제품 데이터 타입
 interface ProductData {
@@ -42,12 +70,7 @@ export async function GET(request: NextRequest) {
   try {
     // 통합 인증 (API Key 또는 Bearer Token)
     const auth = await getAuthFromRequestOrApiKey(request)
-    if (!auth) {
-      return NextResponse.json(
-        { success: false, error: '인증이 필요합니다' },
-        { status: 401 }
-      )
-    }
+    requireAuth(auth)
 
     const { searchParams } = new URL(request.url)
     const productId = searchParams.get('id')
@@ -84,19 +107,11 @@ export async function GET(request: NextRequest) {
             })
           }
         }
-        return NextResponse.json(
-          { success: false, error: '제품을 찾을 수 없습니다' },
-          { status: 404 }
-        )
+        requireResource(null, '제품을 찾을 수 없습니다')
       }
 
-      const data = docSnap.data()
-      if (data?.userId !== auth.userId) {
-        return NextResponse.json(
-          { success: false, error: '접근 권한이 없습니다' },
-          { status: 403 }
-        )
-      }
+      const data = docSnap.data()!
+      requirePermission(data.userId === auth.userId, '접근 권한이 없습니다')
 
       const { nameKeywords, ...productData } = data
       return NextResponse.json({
@@ -265,23 +280,31 @@ export async function GET(request: NextRequest) {
     let categoryStats: { name: string; count: number }[] | undefined
 
     if (!lastId && !category && !search && !minPriceNum && !maxPriceNum) {
-      const allUserProductsSnapshot = await productsRef
-        .where('userId', '==', auth.userId)
-        .select('category.level1')
-        .get()
+      // 캐시 확인
+      const cached = getCategoryStatsFromCache(auth.userId)
+      if (cached) {
+        categoryStats = cached
+      } else {
+        const allUserProductsSnapshot = await productsRef
+          .where('userId', '==', auth.userId)
+          .select('category.level1')
+          .get()
 
-      const categoryCounts: Record<string, number> = {}
-      allUserProductsSnapshot.docs.forEach((doc) => {
-        const cat = doc.data()?.category?.level1
-        if (cat) {
-          categoryCounts[cat] = (categoryCounts[cat] || 0) + 1
-        }
-      })
+        const categoryCounts: Record<string, number> = {}
+        allUserProductsSnapshot.docs.forEach((doc) => {
+          const cat = doc.data()?.category?.level1
+          if (cat) {
+            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1
+          }
+        })
 
-      categoryStats = Object.entries(categoryCounts)
-        .map(([name, count]) => ({ name, count }))
-        .filter((c) => c.count > 0)
-        .sort((a, b) => b.count - a.count)
+        categoryStats = Object.entries(categoryCounts)
+          .map(([name, count]) => ({ name, count }))
+          .filter((c) => c.count > 0)
+          .sort((a, b) => b.count - a.count)
+
+        setCategoryStatsCache(auth.userId, categoryStats)
+      }
     }
 
     // nameKeywords 필드 제거 (검색용으로만 사용, 응답에 불필요)
@@ -300,12 +323,7 @@ export async function GET(request: NextRequest) {
       categoryStats,
     })
   } catch (error) {
-    console.error('GET products error:', error)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return NextResponse.json(
-      { success: false, error: '제품 목록 조회에 실패했습니다', details: errorMessage },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
 
@@ -314,12 +332,7 @@ export async function POST(request: NextRequest) {
   try {
     // API Key 인증만 허용
     const auth = await getAuthFromApiKey(request)
-    if (!auth) {
-      return NextResponse.json(
-        { success: false, error: 'API 키 인증이 필요합니다. X-API-Key 헤더를 확인하세요.' },
-        { status: 401 }
-      )
-    }
+    requireAuth(auth)
 
     const body: ProductData = await request.json()
 
@@ -368,18 +381,15 @@ export async function POST(request: NextRequest) {
 
     await db.collection('products').doc(docId).set(productData)
 
+    invalidateCategoryStatsCache(auth.userId)
+
     return NextResponse.json({
       success: true,
       product: { id: docId, ...productData },
       message: '제품이 등록되었습니다.',
     })
   } catch (error) {
-    console.error('POST products error:', error)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return NextResponse.json(
-      { success: false, error: '제품 등록에 실패했습니다', details: errorMessage },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
 
@@ -388,12 +398,7 @@ export async function PATCH(request: NextRequest) {
   try {
     // API Key 인증만 허용
     const auth = await getAuthFromApiKey(request)
-    if (!auth) {
-      return NextResponse.json(
-        { success: false, error: 'API 키 인증이 필요합니다. X-API-Key 헤더를 확인하세요.' },
-        { status: 401 }
-      )
-    }
+    requireAuth(auth)
 
     const body: Partial<ProductData> & { id: string } = await request.json()
 
@@ -418,20 +423,10 @@ export async function PATCH(request: NextRequest) {
       docSnap = await productsRef.doc(docId).get()
     }
 
-    if (!docSnap.exists) {
-      return NextResponse.json(
-        { success: false, error: '제품을 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
+    requireResource(docSnap.exists, '제품을 찾을 수 없습니다')
 
     const existingData = docSnap.data()
-    if (existingData?.userId !== auth.userId) {
-      return NextResponse.json(
-        { success: false, error: '접근 권한이 없습니다' },
-        { status: 403 }
-      )
-    }
+    requirePermission(existingData?.userId === auth.userId, '접근 권한이 없습니다')
 
     // 업데이트할 데이터 구성
     const updateData: Record<string, unknown> = {
@@ -463,6 +458,8 @@ export async function PATCH(request: NextRequest) {
 
     await productsRef.doc(docId).update(updateData)
 
+    invalidateCategoryStatsCache(auth.userId)
+
     // 업데이트된 문서 반환
     const updatedDoc = await productsRef.doc(docId).get()
 
@@ -472,12 +469,7 @@ export async function PATCH(request: NextRequest) {
       message: '제품이 수정되었습니다.',
     })
   } catch (error) {
-    console.error('PATCH products error:', error)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return NextResponse.json(
-      { success: false, error: '제품 수정에 실패했습니다', details: errorMessage },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
 
@@ -486,12 +478,7 @@ export async function DELETE(request: NextRequest) {
   try {
     // API Key 인증만 허용
     const auth = await getAuthFromApiKey(request)
-    if (!auth) {
-      return NextResponse.json(
-        { success: false, error: 'API 키 인증이 필요합니다. X-API-Key 헤더를 확인하세요.' },
-        { status: 401 }
-      )
-    }
+    requireAuth(auth)
 
     const { searchParams } = new URL(request.url)
     const productId = searchParams.get('id')
@@ -516,33 +503,20 @@ export async function DELETE(request: NextRequest) {
       docSnap = await productsRef.doc(docId).get()
     }
 
-    if (!docSnap.exists) {
-      return NextResponse.json(
-        { success: false, error: '제품을 찾을 수 없습니다' },
-        { status: 404 }
-      )
-    }
+    requireResource(docSnap.exists, '제품을 찾을 수 없습니다')
 
     const existingData = docSnap.data()
-    if (existingData?.userId !== auth.userId) {
-      return NextResponse.json(
-        { success: false, error: '접근 권한이 없습니다' },
-        { status: 403 }
-      )
-    }
+    requirePermission(existingData?.userId === auth.userId, '접근 권한이 없습니다')
 
     await productsRef.doc(docId).delete()
+
+    invalidateCategoryStatsCache(auth.userId)
 
     return NextResponse.json({
       success: true,
       message: '제품이 삭제되었습니다.',
     })
   } catch (error) {
-    console.error('DELETE products error:', error)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return NextResponse.json(
-      { success: false, error: '제품 삭제에 실패했습니다', details: errorMessage },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

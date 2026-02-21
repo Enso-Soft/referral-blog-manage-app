@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
+import { handleApiError, requireAdmin } from '@/lib/api-error-handler'
 
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthFromRequest(request)
-    if (!auth || !auth.isAdmin) {
-      return NextResponse.json(
-        { success: false, error: '관리자 권한이 필요합니다' },
-        { status: 403 }
-      )
-    }
+    requireAdmin(auth)
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
@@ -21,6 +17,16 @@ export async function GET(request: NextRequest) {
 
     const db = getDb()
     let query: FirebaseFirestore.Query = db.collection('users').orderBy('email')
+
+    // role 필터는 Firestore 쿼리 레벨에서 적용 가능 (composite index 불필요 — email orderBy와 호환)
+    if (role && (role === 'admin' || role === 'user')) {
+      query = query.where('role', '==', role)
+    }
+
+    // status === 'blocked'만 Firestore 레벨 적용 (status 필드 없는 기존 유저가 있으므로 'active' 필터는 인메모리)
+    if (status === 'blocked') {
+      query = query.where('status', '==', 'blocked')
+    }
 
     // 커서 기반 페이지네이션
     if (lastId) {
@@ -34,9 +40,29 @@ export async function GET(request: NextRequest) {
 
     const snapshot = await query.get()
 
-    // 각 사용자별 postCount, productCount 병렬 조회
-    let users = await Promise.all(
-      snapshot.docs.map(async (doc) => {
+    // 1단계: 인메모리 필터 적용 (search, status=active)
+    let filteredDocs = snapshot.docs
+
+    if (search) {
+      const searchLower = search.toLowerCase()
+      filteredDocs = filteredDocs.filter((doc) => {
+        const data = doc.data()
+        const email = (data.email || '').toLowerCase()
+        const displayName = (data.displayName || '').toLowerCase()
+        return email.includes(searchLower) || displayName.includes(searchLower)
+      })
+    }
+
+    if (status === 'active') {
+      filteredDocs = filteredDocs.filter((doc) => {
+        const data = doc.data()
+        return !data.status || data.status === 'active'
+      })
+    }
+
+    // 2단계: 필터 통과한 유저에 대해서만 count() 쿼리 실행
+    const users = await Promise.all(
+      filteredDocs.map(async (doc) => {
         const data = doc.data()
 
         const [postsCountSnapshot, productsCountSnapshot] = await Promise.all([
@@ -57,26 +83,6 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // 검색 필터 (email 또는 displayName)
-    if (search) {
-      const searchLower = search.toLowerCase()
-      users = users.filter(
-        (u) =>
-          u.email.toLowerCase().includes(searchLower) ||
-          u.displayName.toLowerCase().includes(searchLower)
-      )
-    }
-
-    // 역할 필터
-    if (role && (role === 'admin' || role === 'user')) {
-      users = users.filter((u) => u.role === role)
-    }
-
-    // 상태 필터
-    if (status && (status === 'active' || status === 'blocked')) {
-      users = users.filter((u) => u.status === status)
-    }
-
     const lastDoc = snapshot.docs[snapshot.docs.length - 1]
 
     return NextResponse.json({
@@ -90,10 +96,6 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('GET users error:', error)
-    return NextResponse.json(
-      { success: false, error: '사용자 목록 조회에 실패했습니다' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

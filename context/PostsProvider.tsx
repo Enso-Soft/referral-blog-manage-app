@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react'
 import {
     collection,
     query,
@@ -8,13 +8,17 @@ import {
     orderBy,
     limit,
     onSnapshot,
+    getDocs,
+    startAfter,
     type Query,
     type DocumentData,
     type QueryConstraint,
+    type DocumentSnapshot,
 } from 'firebase/firestore'
 import { getFirebaseDb } from '@/lib/firebase'
-import { useAuth } from '@/components/AuthProvider'
+import { useAuth } from '@/components/layout/AuthProvider'
 import type { BlogPost } from '@/lib/firestore'
+import { BlogPostSchema } from '@/lib/schemas/post'
 
 // Types
 type StatusFilter = 'all' | 'draft' | 'published'
@@ -30,8 +34,7 @@ interface PostsContextType {
     setFilter: (filter: StatusFilter) => void
     typeFilter: TypeFilter
     setTypeFilter: (filter: TypeFilter) => void
-    scrollPosition: number
-    setScrollPosition: (position: number) => void
+    removePost: (postId: string) => void
     loadingMore: boolean
     hasMore: boolean
     loadMore: () => void
@@ -41,45 +44,115 @@ const PostsContext = createContext<PostsContextType | undefined>(undefined)
 
 export function PostsProvider({ children }: { children: ReactNode }) {
     const { user, isAdmin, loading: authLoading } = useAuth()
-    // rawPosts: Firestore에서 가져온 원본 데이터
+    // rawPosts: onSnapshot 1페이지 데이터
     const [rawPosts, setRawPosts] = useState<BlogPost[]>([])
+    // extraPosts: getDocs로 가져온 2페이지 이후 데이터 누적
+    const [extraPosts, setExtraPosts] = useState<BlogPost[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
     // Pagination state
-    const [pageSize, setPageSize] = useState(PAGE_SIZE)
     const [loadingMore, setLoadingMore] = useState(false)
     const [hasMore, setHasMore] = useState(false)
+
+    // 커서: startAfter에 사용할 마지막 문서 스냅샷
+    const cursorRef = useRef<DocumentSnapshot<DocumentData> | null>(null)
+    // extraPosts 로드 여부 (onSnapshot이 커서를 덮어쓰지 않도록 보호)
+    const hasLoadedExtraRef = useRef(false)
 
     // Persistent state
     const [filter, setFilter] = useState<StatusFilter>('all')
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
-    const [scrollPosition, setScrollPosition] = useState(0)
+
+    // 필터 변경 시 모든 추가 페이지 데이터 초기화
+    const resetExtra = useCallback(() => {
+        setExtraPosts([])
+        cursorRef.current = null
+        hasLoadedExtraRef.current = false
+    }, [])
 
     const handleSetFilter = useCallback((newFilter: StatusFilter) => {
         if (newFilter === filter) return
         setFilter(newFilter)
-        setPageSize(PAGE_SIZE)
+        resetExtra()
         setRawPosts([])
         setLoading(true)
-    }, [filter])
+    }, [filter, resetExtra])
 
     const handleSetTypeFilter = useCallback((newFilter: TypeFilter) => {
+        if (newFilter === typeFilter) return
         setTypeFilter(newFilter)
-    }, [])
+        resetExtra()
+        setRawPosts([])
+        setLoading(true)
+    }, [typeFilter, resetExtra])
 
-    const loadMore = useCallback(() => {
-        if (loadingMore || !hasMore) return
+    // 쿼리 제약 조건 빌더 (onSnapshot, getDocs 공용)
+    const buildConstraints = useCallback((): QueryConstraint[] => {
+        const constraints: QueryConstraint[] = []
+        if (!isAdmin && user) {
+            constraints.push(where('userId', '==', user.uid))
+        }
+        if (filter !== 'all') {
+            constraints.push(where('status', '==', filter))
+        }
+        if (typeFilter !== 'all') {
+            constraints.push(where('postType', '==', typeFilter))
+        }
+        constraints.push(orderBy('createdAt', 'desc'))
+        return constraints
+    }, [user, isAdmin, filter, typeFilter])
+
+    // loadMore: 2페이지 이후 getDocs로 추가 데이터 가져오기
+    const loadMore = useCallback(async () => {
+        if (loadingMore || !hasMore || !cursorRef.current) return
         setLoadingMore(true)
-        setPageSize(prev => prev + PAGE_SIZE)
-    }, [loadingMore, hasMore])
 
-    // Firestore 구독 (filter, pageSize 의존성, typeFilter는 클라이언트 사이드 필터링)
+        try {
+            const db = getFirebaseDb()
+            const postsRef = collection(db, 'blog_posts')
+            const constraints = buildConstraints()
+
+            const q = query(
+                postsRef,
+                ...constraints,
+                startAfter(cursorRef.current),
+                limit(PAGE_SIZE)
+            ) as Query<DocumentData>
+
+            const snapshot = await getDocs(q)
+            const newPosts = snapshot.docs.map((doc) => {
+                const data = { id: doc.id, ...doc.data() }
+                if (process.env.NODE_ENV === 'development') {
+                    const result = BlogPostSchema.safeParse(data)
+                    if (!result.success) {
+                        console.warn(`[PostsProvider] BlogPost validation failed for doc ${doc.id}:`, result.error.flatten().fieldErrors)
+                    }
+                }
+                return data
+            }) as BlogPost[]
+
+            if (snapshot.docs.length > 0) {
+                cursorRef.current = snapshot.docs[snapshot.docs.length - 1]
+                hasLoadedExtraRef.current = true
+            }
+
+            setExtraPosts(prev => [...prev, ...newPosts])
+            setHasMore(snapshot.docs.length >= PAGE_SIZE)
+        } catch (err) {
+            console.error('Failed to load more posts:', err)
+        } finally {
+            setLoadingMore(false)
+        }
+    }, [loadingMore, hasMore, buildConstraints])
+
+    // Firestore 구독 (1페이지만 — filter, typeFilter 의존성)
     useEffect(() => {
         if (authLoading) return
 
         if (!user) {
             setRawPosts([])
+            setExtraPosts([])
             setLoading(false)
             setError('로그인이 필요합니다')
             return
@@ -90,30 +163,31 @@ export function PostsProvider({ children }: { children: ReactNode }) {
         try {
             const db = getFirebaseDb()
             const postsRef = collection(db, 'blog_posts')
-            const constraints: QueryConstraint[] = []
+            const constraints = buildConstraints()
 
-            if (!isAdmin) {
-                constraints.push(where('userId', '==', user.uid))
-            }
-
-            if (filter !== 'all') {
-                constraints.push(where('status', '==', filter))
-            }
-
-            constraints.push(orderBy('createdAt', 'desc'))
-            constraints.push(limit(pageSize))
-
-            const q = query(postsRef, ...constraints) as Query<DocumentData>
+            const q = query(postsRef, ...constraints, limit(PAGE_SIZE)) as Query<DocumentData>
 
             const unsubscribe = onSnapshot(
                 q,
                 (snapshot) => {
-                    const posts = snapshot.docs.map((doc) => ({
-                        id: doc.id,
-                        ...doc.data(),
-                    })) as BlogPost[]
+                    const posts = snapshot.docs.map((doc) => {
+                        const data = { id: doc.id, ...doc.data() }
+                        if (process.env.NODE_ENV === 'development') {
+                            const result = BlogPostSchema.safeParse(data)
+                            if (!result.success) {
+                                console.warn(`[PostsProvider] BlogPost validation failed for doc ${doc.id}:`, result.error.flatten().fieldErrors)
+                            }
+                        }
+                        return data
+                    }) as BlogPost[]
                     setRawPosts(posts)
-                    setHasMore(snapshot.docs.length >= pageSize)
+                    setHasMore(snapshot.docs.length >= PAGE_SIZE)
+
+                    // 커서 업데이트: extraPosts가 없을 때만 (추가 로드 후에는 커서 보존)
+                    if (!hasLoadedExtraRef.current && snapshot.docs.length > 0) {
+                        cursorRef.current = snapshot.docs[snapshot.docs.length - 1]
+                    }
+
                     setLoading(false)
                     setLoadingMore(false)
                 },
@@ -132,17 +206,22 @@ export function PostsProvider({ children }: { children: ReactNode }) {
             setLoading(false)
             setLoadingMore(false)
         }
-    }, [user?.uid, isAdmin, authLoading, filter, pageSize])
+    }, [user?.uid, isAdmin, authLoading, filter, typeFilter, buildConstraints])
 
-    // Client-side filtering for postType (useMemo로 캐싱)
+    // 글 삭제 시 로컬 상태에서 즉시 제거 (optimistic removal)
+    const removePost = useCallback((postId: string) => {
+        setRawPosts(prev => prev.filter(p => p.id !== postId))
+        setExtraPosts(prev => prev.filter(p => p.id !== postId))
+    }, [])
+
+    // 최종 posts: rawPosts + extraPosts (ID 기반 중복 제거)
     const posts = useMemo(() => {
-        if (typeFilter === 'all') return rawPosts
-        return rawPosts.filter(post => {
-            if (typeFilter === 'affiliate') return post.postType === 'affiliate'
-            if (typeFilter === 'general') return post.postType === 'general' || !post.postType
-            return true
-        })
-    }, [rawPosts, typeFilter])
+        if (extraPosts.length === 0) return rawPosts
+
+        const seenIds = new Set(rawPosts.map(p => p.id))
+        const dedupedExtra = extraPosts.filter(p => !seenIds.has(p.id))
+        return [...rawPosts, ...dedupedExtra]
+    }, [rawPosts, extraPosts])
 
     const contextValue = useMemo(
         () => ({
@@ -153,13 +232,12 @@ export function PostsProvider({ children }: { children: ReactNode }) {
             setFilter: handleSetFilter,
             typeFilter,
             setTypeFilter: handleSetTypeFilter,
-            scrollPosition,
-            setScrollPosition,
+            removePost,
             loadingMore,
             hasMore,
             loadMore,
         }),
-        [posts, loading, error, filter, handleSetFilter, typeFilter, handleSetTypeFilter, scrollPosition, loadingMore, hasMore, loadMore]
+        [posts, loading, error, filter, handleSetFilter, typeFilter, handleSetTypeFilter, removePost, loadingMore, hasMore, loadMore]
     )
 
     return (

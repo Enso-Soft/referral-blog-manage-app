@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logger } from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams.get('url')
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!response.ok) {
-      console.error('Fetch failed:', response.status, response.statusText, url)
+      logger.error('Fetch failed:', `${response.status} ${response.statusText} ${url}`)
       return NextResponse.json({ error: 'Failed to fetch image' }, { status: 500 })
     }
 
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('Download error:', errorMessage, 'URL:', url)
+    logger.error('Download error:', `${errorMessage} URL: ${url}`)
     return NextResponse.json({ error: 'Download failed', details: errorMessage }, { status: 500 })
   }
 }

@@ -2,17 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromApiKey } from '@/lib/auth-admin'
+import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
 
 // GET: AI 글 작성 요청 조회 (단건 또는 목록)
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthFromApiKey(request)
-    if (!auth) {
-      return NextResponse.json(
-        { success: false, error: 'API 키가 필요합니다. X-API-Key 헤더를 확인하세요.' },
-        { status: 401 }
-      )
-    }
+    requireAuth(auth)
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -22,22 +18,10 @@ export async function GET(request: NextRequest) {
     if (id) {
       const docRef = db.collection('ai_write_requests').doc(id)
       const doc = await docRef.get()
-
-      if (!doc.exists) {
-        return NextResponse.json(
-          { success: false, error: '요청을 찾을 수 없습니다.' },
-          { status: 404 }
-        )
-      }
+      requireResource(doc.exists, '요청을 찾을 수 없습니다.')
 
       const data = doc.data()!
-
-      if (data.userId !== auth.userId) {
-        return NextResponse.json(
-          { success: false, error: '이 요청에 접근할 권한이 없습니다.' },
-          { status: 403 }
-        )
-      }
+      requirePermission(data.userId === auth.userId, '이 요청에 접근할 권한이 없습니다.')
 
       return NextResponse.json({
         success: true,
@@ -115,11 +99,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('AI Requests API GET error:', error)
-    return NextResponse.json(
-      { success: false, error: '요청 조회에 실패했습니다.' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
 
@@ -127,12 +107,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const auth = await getAuthFromApiKey(request)
-    if (!auth) {
-      return NextResponse.json(
-        { success: false, error: 'API 키가 필요합니다. X-API-Key 헤더를 확인하세요.' },
-        { status: 401 }
-      )
-    }
+    requireAuth(auth)
 
     const body = await request.json()
 
@@ -146,22 +121,10 @@ export async function PATCH(request: NextRequest) {
     const db = getDb()
     const docRef = db.collection('ai_write_requests').doc(body.id)
     const doc = await docRef.get()
-
-    if (!doc.exists) {
-      return NextResponse.json(
-        { success: false, error: '요청을 찾을 수 없습니다.' },
-        { status: 404 }
-      )
-    }
+    requireResource(doc.exists, '요청을 찾을 수 없습니다.')
 
     const existingData = doc.data()!
-
-    if (existingData.userId !== auth.userId) {
-      return NextResponse.json(
-        { success: false, error: '이 요청을 수정할 권한이 없습니다.' },
-        { status: 403 }
-      )
-    }
+    requirePermission(existingData.userId === auth.userId, '이 요청을 수정할 권한이 없습니다.')
 
     // 업데이트 가능한 필드만 추출
     const updateData: Record<string, any> = {}
@@ -225,11 +188,7 @@ export async function PATCH(request: NextRequest) {
       message: '요청이 업데이트되었습니다.',
     })
   } catch (error) {
-    console.error('AI Requests API PATCH error:', error)
-    return NextResponse.json(
-      { success: false, error: '요청 업데이트에 실패했습니다.' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
 
@@ -237,12 +196,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const auth = await getAuthFromApiKey(request)
-    if (!auth) {
-      return NextResponse.json(
-        { success: false, error: 'API 키가 필요합니다. X-API-Key 헤더를 확인하세요.' },
-        { status: 401 }
-      )
-    }
+    requireAuth(auth)
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -257,22 +211,10 @@ export async function DELETE(request: NextRequest) {
     const db = getDb()
     const docRef = db.collection('ai_write_requests').doc(id)
     const doc = await docRef.get()
-
-    if (!doc.exists) {
-      return NextResponse.json(
-        { success: false, error: '요청을 찾을 수 없습니다.' },
-        { status: 404 }
-      )
-    }
+    requireResource(doc.exists, '요청을 찾을 수 없습니다.')
 
     const data = doc.data()!
-
-    if (data.userId !== auth.userId) {
-      return NextResponse.json(
-        { success: false, error: '이 요청을 삭제할 권한이 없습니다.' },
-        { status: 403 }
-      )
-    }
+    requirePermission(data.userId === auth.userId, '이 요청을 삭제할 권한이 없습니다.')
 
     await docRef.delete()
 
@@ -282,10 +224,6 @@ export async function DELETE(request: NextRequest) {
       message: '요청이 삭제되었습니다.',
     })
   } catch (error) {
-    console.error('AI Requests API DELETE error:', error)
-    return NextResponse.json(
-      { success: false, error: '요청 삭제에 실패했습니다.' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '@/components/AuthProvider'
+import { useAuth } from '@/components/layout/AuthProvider'
 import { queryKeys } from '@/lib/query-client'
 import type { CreatePostInput, UpdatePostInput, BlogPost } from '@/lib/schemas'
 

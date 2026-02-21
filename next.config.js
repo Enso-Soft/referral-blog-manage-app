@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'framer-motion', 'date-fns', 'firebase/firestore'],
+  },
   images: {
     remotePatterns: [
       {
@@ -49,6 +52,7 @@ const nextConfig = {
     S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY,
     S3_REGION: process.env.S3_REGION,
     S3_BUCKET: process.env.S3_BUCKET,
+    WP_ENCRYPTION_KEY: process.env.WP_ENCRYPTION_KEY,
   },
 }
 
