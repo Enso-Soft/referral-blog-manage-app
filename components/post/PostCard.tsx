@@ -89,85 +89,110 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
   if (viewMode === 'list') {
     return (
       <Link href={`/posts/${post.id}`} className="block group">
-        <article className="bg-card hover:bg-card/80 border border-border hover:border-border/80 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-md flex flex-row items-center">
-          {/* Thumbnail */}
-          <div className="w-[160px] h-[90px] relative overflow-hidden bg-secondary/50 shrink-0">
-            {thumbnail && !imageError ? (
-              <Image
-                src={thumbnail}
-                alt={post.title}
-                fill
-                sizes="160px"
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                onError={() => setImageError(true)}
-                unoptimized
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-                <FileText className="w-8 h-8" />
-              </div>
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 px-4 py-3 flex flex-row items-center gap-4 min-w-0">
-            {/* Text area */}
-            <div className="flex flex-col flex-1 min-w-0">
-              <h3 className="text-base font-semibold text-card-foreground line-clamp-1 min-w-0 group-hover:text-primary transition-colors">
-                {post.title || "제목 없음"}
-              </h3>
-              <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground mt-1">
-                <div className="flex items-center gap-1 shrink-0">
-                  <Calendar className="w-3 h-3" />
-                  <span>{formatDate(post.createdAt)}</span>
+        <article className="bg-card hover:bg-card/80 border border-border hover:border-border/80 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-md">
+          {/* Top: Thumbnail + Info row */}
+          <div className="flex flex-row items-center">
+            {/* Thumbnail */}
+            <div className="w-[100px] h-[80px] sm:w-[160px] sm:h-[90px] relative overflow-hidden bg-secondary/50 shrink-0">
+              {thumbnail && !imageError ? (
+                <Image
+                  src={thumbnail}
+                  alt={post.title}
+                  fill
+                  sizes="(max-width: 640px) 100px, 160px"
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  onError={() => setImageError(true)}
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
+                  <FileText className="w-8 h-8" />
                 </div>
-                {post.metadata?.wordCount && (
-                  <span className="shrink-0">{post.metadata.wordCount.toLocaleString()}자</span>
-                )}
-                {/* Status Badge */}
-                {status === 'published' ? (
-                  <PublishedBadge
-                    wordpress={wordpressData}
-                    publishedUrls={publishedUrls}
-                    publishedUrl={post.publishedUrl}
-                    className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm border bg-green-600 text-white border-green-700"
-                  />
-                ) : (
-                  <Badge className="px-1.5 py-0.5 text-[10px] shadow-sm bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
-                    초안
-                  </Badge>
-                )}
-                {onTypeChange && (
-                  <Button
-                    variant="default"
-                    onClick={handleTypeToggle}
-                    disabled={isTypeChanging}
-                    className={cn(
-                      "px-2 h-5 text-[10px] font-semibold rounded-full shrink-0 flex items-center gap-1 transition-colors",
-                      type === 'affiliate'
-                        ? "bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700"
-                        : "bg-slate-600 text-white border-slate-700 hover:bg-slate-700"
-                    )}
-                  >
-                    {isTypeChanging ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      type === 'affiliate' ? '제휴' : '일반'
-                    )}
-                  </Button>
-                )}
-              </div>
+              )}
             </div>
 
-            {/* Action buttons */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Content */}
+            <div className="flex-1 px-3 sm:px-4 py-2 sm:py-3 flex flex-row items-center gap-4 min-w-0">
+              {/* Text area */}
+              <div className="flex flex-col flex-1 min-w-0">
+                <h3 className="text-sm sm:text-base font-semibold text-card-foreground line-clamp-2 sm:line-clamp-1 min-w-0 group-hover:text-primary transition-colors">
+                  {post.title || "제목 없음"}
+                </h3>
+                <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground mt-1">
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Calendar className="w-3 h-3" />
+                    <span>{formatDate(post.createdAt)}</span>
+                  </div>
+                  {post.metadata?.wordCount && (
+                    <span className="shrink-0">{post.metadata.wordCount.toLocaleString()}자</span>
+                  )}
+                  {/* Status Badge */}
+                  {status === 'published' ? (
+                    <PublishedBadge
+                      wordpress={wordpressData}
+                      publishedUrls={publishedUrls}
+                      publishedUrl={post.publishedUrl}
+                      className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm border bg-green-600 text-white border-green-700"
+                    />
+                  ) : (
+                    <Badge className="px-1.5 py-0.5 text-[10px] shadow-sm bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
+                      초안
+                    </Badge>
+                  )}
+                  {/* Type badge - desktop only (mobile shows button below) */}
+                  <span className={cn(
+                    "hidden sm:inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full",
+                    type === 'affiliate'
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-600 text-white"
+                  )}>
+                    {type === 'affiliate' ? '제휴' : '일반'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action button - desktop only */}
+              <div className="hidden sm:flex items-center gap-2 shrink-0">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleStatusToggle}
+                  disabled={isStatusChanging}
+                  className={cn(
+                    "w-auto text-xs font-medium rounded-lg transition-all",
+                    status === 'draft'
+                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/40"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
+                  )}
+                >
+                  {isStatusChanging ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : status === 'draft' ? (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>발행하기</span>
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>초안으로</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom: Action buttons - mobile only */}
+          <div className="sm:hidden px-3 pb-2.5 pt-0">
+            <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={handleStatusToggle}
                 disabled={isStatusChanging}
                 className={cn(
-                  "w-auto text-xs font-medium rounded-lg transition-all",
+                  "flex-1 text-xs font-medium rounded-lg transition-all",
                   status === 'draft'
                     ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/40"
                     : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
@@ -184,6 +209,32 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
                   <>
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>초안으로</span>
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleTypeToggle}
+                disabled={isTypeChanging}
+                className={cn(
+                  "flex-1 text-xs font-medium rounded-lg transition-all",
+                  type === 'affiliate'
+                    ? "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
+                    : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/40"
+                )}
+              >
+                {isTypeChanging ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : type === 'general' ? (
+                  <>
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>제휴 글로</span>
+                  </>
+                ) : (
+                  <>
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>일반 글로</span>
                   </>
                 )}
               </Button>

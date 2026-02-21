@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 const DISCLAIMERS = {
   naver: {
     label: '네이버 문구',
+    shortLabel: '네이버',
     detectPattern: 'naver.me',
     checkText: '네이버 쇼핑 커넥트 활동의 일환',
     html: '<div style="text-align: center; padding: 12px 16px; background-color: #f8f9fa; margin-bottom: 24px; font-size: 13px; color: #333 !important; border-radius: 8px;">이 포스팅은 네이버 쇼핑 커넥트 활동의 일환으로, 판매 발생 시 수수료를 제공받습니다.</div>',
@@ -22,6 +23,7 @@ const DISCLAIMERS = {
   },
   coupang: {
     label: '쿠팡 문구',
+    shortLabel: '쿠팡',
     detectPattern: 'link.coupang.com',
     checkText: '쿠팡 파트너스 활동의 일환',
     html: '<div style="text-align: center; padding: 12px 16px; background-color: #f8f9fa; margin-bottom: 24px; font-size: 13px; color: #333 !important; border-radius: 8px;">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 판매 발생 시 수수료를 제공받습니다.</div>',
@@ -33,9 +35,10 @@ const DISCLAIMERS = {
 interface DisclaimerButtonsProps {
   content: string
   onInsert: (html: string) => void
+  isMobile?: boolean
 }
 
-export function DisclaimerButtons({ content, onInsert }: DisclaimerButtonsProps) {
+export function DisclaimerButtons({ content, onInsert, isMobile = false }: DisclaimerButtonsProps) {
   const [confirmKey, setConfirmKey] = useState<keyof typeof DISCLAIMERS | null>(null)
 
   const handleClick = (key: keyof typeof DISCLAIMERS) => {
@@ -56,7 +59,9 @@ export function DisclaimerButtons({ content, onInsert }: DisclaimerButtonsProps)
 
   return (
     <>
-      <span className="text-xs font-medium text-foreground whitespace-nowrap">대가성 문구 추가</span>
+      <span className="text-xs font-medium text-foreground whitespace-nowrap">
+        {isMobile ? '대가성 문구' : '대가성 문구 추가'}
+      </span>
       {(Object.keys(DISCLAIMERS) as (keyof typeof DISCLAIMERS)[]).map((key) => {
         const d = DISCLAIMERS[key]
         const isHighlighted = content.includes(d.detectPattern)
@@ -64,12 +69,13 @@ export function DisclaimerButtons({ content, onInsert }: DisclaimerButtonsProps)
           <Button
             key={key}
             variant="ghost"
+            size={isMobile ? 'sm' : 'default'}
             onClick={() => handleClick(key)}
             className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 h-auto text-xs font-medium whitespace-nowrap rounded-xl transition-colors shadow-sm ${
               isHighlighted ? d.activeColor : d.inactiveColor
             }`}
           >
-            {d.label}
+            {isMobile ? d.shortLabel : d.label}
           </Button>
         )
       })}

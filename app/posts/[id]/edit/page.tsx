@@ -134,7 +134,7 @@ function PostEditContent() {
             className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-700"
           >
             <ArrowLeft className="w-4 h-4" />
-            상세보기로
+            <span className="hidden md:inline">상세보기로</span>
           </Link>
 
           {/* Save Status */}
@@ -160,7 +160,7 @@ function PostEditContent() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full text-2xl font-bold text-gray-900 dark:text-gray-100 mt-4 bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-blue-500 focus:outline-none transition-colors pb-1"
+          className="w-full text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 mt-4 bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-blue-500 focus:outline-none transition-colors pb-1"
           placeholder="제목을 입력하세요"
         />
 
@@ -185,7 +185,7 @@ function PostEditContent() {
               제휴/홍보
             </button>
           </div>
-          <p className="text-sm text-gray-500">
+          <p className="hidden md:block text-sm text-gray-500">
             {postType === 'general' ? '일반적인 블로그 콘텐츠입니다.' : '제품 홍보 및 제휴 링크가 포함된 글입니다.'}
           </p>
         </div>

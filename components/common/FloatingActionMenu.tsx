@@ -50,7 +50,7 @@ export function FloatingActionMenu({ onOpenPanel, hasThreads }: FloatingActionMe
   }
 
   return (
-    <div ref={menuRef} className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+    <div ref={menuRef} className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] right-[calc(1.5rem+env(safe-area-inset-right,0px))] z-40 flex flex-col items-end gap-2">
       {/* 메뉴 항목들 */}
       <AnimatePresence>
         {isOpen && (
@@ -65,7 +65,7 @@ export function FloatingActionMenu({ onOpenPanel, hasThreads }: FloatingActionMe
                   exit={{ opacity: 0, y: 10, scale: 0.9 }}
                   transition={{ delay: i * 0.05, duration: 0.15 }}
                   onClick={() => handleItemClick(item.id)}
-                  className="flex items-center gap-2.5 pl-4 pr-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap"
+                  className="flex items-center gap-2.5 pl-4 pr-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap max-w-[calc(100vw-2rem)]"
                 >
                   <span className="text-sm font-medium">{item.label}</span>
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">

@@ -6,6 +6,8 @@ import DOMPurify from 'dompurify'
 import { Eye, Code, AlertTriangle, Save, Loader2, Columns } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DisclaimerButtons } from './DisclaimerButtons'
+import { useIsMobile } from '@/hooks/useMediaQuery'
+import type { HtmlCodeEditorHandle } from './HtmlCodeEditor'
 
 // Dynamic imports for heavy editors
 const HtmlCodeEditor = dynamic(
@@ -88,6 +90,30 @@ function findElementAndNextByLine(container: Element, lineNumber: number): { ele
   return { element: closest, currentLine: closestLine, nextLine }
 }
 
+// 스크롤 컨테이너 상단 기준으로 가장 가까운 data-source-line 값 추출
+function getLineFromContainerScroll(container: HTMLElement): number {
+  const elements = container.querySelectorAll('[data-source-line]')
+  const containerRect = container.getBoundingClientRect()
+
+  let closestLine = 1
+  let closestDistance = Infinity
+
+  for (const el of elements) {
+    const rect = (el as HTMLElement).getBoundingClientRect()
+    const relativeTop = rect.top - containerRect.top
+    const distance = Math.abs(relativeTop)
+
+    if (distance < closestDistance) {
+      closestDistance = distance
+      closestLine = parseInt(el.getAttribute('data-source-line')!)
+    }
+
+    if (relativeTop > containerRect.height) break
+  }
+
+  return closestLine
+}
+
 // 디바운스 유틸리티
 function debounce<T extends (...args: Parameters<T>) => void>(fn: T, delay: number): T {
   let timeoutId: NodeJS.Timeout | null = null
@@ -98,6 +124,7 @@ function debounce<T extends (...args: Parameters<T>) => void>(fn: T, delay: numb
 }
 
 export function PostEditor({ initialContent, onSave }: PostEditorProps) {
+  const isMobile = useIsMobile()
   const [content, setContent] = useState(initialContent)
   const [mode, setMode] = useState<EditorMode>('split')
   const [saving, setSaving] = useState(false)
@@ -107,8 +134,21 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
   // refs
   const originalContent = useRef(initialContent)
   const previewRef = useRef<HTMLDivElement>(null)
+  const htmlEditorRef = useRef<HtmlCodeEditorHandle>(null)
+  const splitPreviewRef = useRef<HTMLDivElement>(null)
   const lastScrolledLine = useRef<number>(-1)
   const rafRef = useRef<number | null>(null)
+
+  // 모드 전환 시 스크롤 싱크를 위한 추적 ref
+  const lastEditorLine = useRef<number>(1)
+  const lastPreviewScrollPercent = useRef<number>(0)
+
+  // 모바일에서 split 모드 비활성화 — split 선택 중 모바일 전환 시 html로 fallback
+  useEffect(() => {
+    if (isMobile && mode === 'split') {
+      setMode('html')
+    }
+  }, [isMobile, mode])
 
   // 미리보기용 HTML (data-source-line 속성 포함 + XSS sanitize)
   const previewContent = useMemo(() => DOMPurify.sanitize(addLineAttributes(content), {
@@ -120,16 +160,16 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
   const debouncedScrollToElement = useMemo(
     () =>
       debounce((lineNumber: number) => {
-        if (!previewRef.current || lineNumber < 0) return
+        if (!splitPreviewRef.current || lineNumber < 0) return
         if (lineNumber === lastScrolledLine.current) return
 
-        const previewContainer = previewRef.current.querySelector('.max-w-none')
+        const previewContainer = splitPreviewRef.current.querySelector('.max-w-none')
         if (!previewContainer) return
 
         const targetElement = findElementByLine(previewContainer, lineNumber)
         if (!targetElement) return
 
-        const container = previewRef.current!
+        const container = splitPreviewRef.current!
         const containerRect = container.getBoundingClientRect()
         const elementRect = targetElement.getBoundingClientRect()
         const relativeTop = elementRect.top - containerRect.top + container.scrollTop
@@ -156,9 +196,9 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
 
   // 활성 블록 스타일 적용
   useEffect(() => {
-    if (!previewRef.current || activeSourceLine < 0) return
+    if (!splitPreviewRef.current || activeSourceLine < 0) return
 
-    const previewContainer = previewRef.current.querySelector('.max-w-none')
+    const previewContainer = splitPreviewRef.current.querySelector('.max-w-none')
     if (!previewContainer) return
 
     // 기존 활성 클래스 제거
@@ -191,24 +231,32 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
     [checkTistoryCompatibility]
   )
 
+  // html 모드의 에디터 스크롤 추적
+  const handleHtmlEditorScroll = useCallback((scrollPercent: number, firstVisibleLine: number) => {
+    lastEditorLine.current = firstVisibleLine
+    lastPreviewScrollPercent.current = scrollPercent
+  }, [])
 
-  // 스크롤 동기화 (requestAnimationFrame 적용)
+  // split 모드의 스크롤 동기화 (requestAnimationFrame 적용)
   const handleEditorScroll = useCallback((scrollPercent: number, firstVisibleLine: number) => {
+    lastEditorLine.current = firstVisibleLine
+    lastPreviewScrollPercent.current = scrollPercent
+
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current)
     }
 
     rafRef.current = requestAnimationFrame(() => {
-      if (!previewRef.current) return
+      if (!splitPreviewRef.current) return
 
-      const previewContainer = previewRef.current.querySelector('.max-w-none')
+      const previewContainer = splitPreviewRef.current.querySelector('.max-w-none')
       if (!previewContainer) return
 
       const result = findElementAndNextByLine(previewContainer, firstVisibleLine)
 
       if (result) {
         const { element: targetElement, currentLine, nextLine } = result
-        const container = previewRef.current!
+        const container = splitPreviewRef.current!
 
         // --- Intra-block Interpolation ---
         const blockHeightLines = Math.max(1, nextLine - currentLine)
@@ -230,8 +278,8 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
       }
 
       // 요소를 못 찾은 경우 퍼센트 기반 대체
-      const maxScroll = previewRef.current.scrollHeight - previewRef.current.clientHeight
-      previewRef.current.scrollTop = maxScroll * scrollPercent
+      const maxScroll = splitPreviewRef.current.scrollHeight - splitPreviewRef.current.clientHeight
+      splitPreviewRef.current.scrollTop = maxScroll * scrollPercent
     })
   }, [])
 
@@ -243,6 +291,38 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
       }
     }
   }, [])
+
+  // 모드 전환 핸들러 — 에디터/미리보기는 항상 마운트, display toggle로 스크롤 보존
+  const handleModeChange = useCallback((newMode: EditorMode) => {
+    const prevMode = mode
+    setMode(newMode)
+
+    // 코드 → 미리보기: 에디터 라인 기반으로 프리뷰 스크롤
+    if ((prevMode === 'html' || prevMode === 'split') && newMode === 'preview') {
+      const line = htmlEditorRef.current?.getFirstVisibleLine() ?? lastEditorLine.current
+      requestAnimationFrame(() => {
+        if (!previewRef.current) return
+        const previewContainer = previewRef.current.querySelector('.max-w-none')
+        if (!previewContainer) return
+
+        const targetElement = findElementByLine(previewContainer, line)
+        if (targetElement) {
+          const container = previewRef.current!
+          const containerRect = container.getBoundingClientRect()
+          const elementRect = targetElement.getBoundingClientRect()
+          const relativeTop = elementRect.top - containerRect.top + container.scrollTop
+          container.scrollTo({ top: Math.max(0, relativeTop - 20), behavior: 'auto' })
+        }
+      })
+    }
+
+    // 미리보기 → 코드: 에디터는 항상 마운트 상태이므로 스크롤 자동 보존, layout만 갱신
+    if (prevMode === 'preview' && newMode === 'html') {
+      requestAnimationFrame(() => {
+        htmlEditorRef.current?.layout()
+      })
+    }
+  }, [mode])
 
   const handleSave = async () => {
     setSaving(true)
@@ -260,58 +340,24 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
     }
   }
 
+  const editorHeight = isMobile ? 'calc(100dvh - 240px)' : '700px'
+
   return (
     <div className="space-y-4">
-      {/* Mode Tabs */}
-      <div className="flex items-center justify-between">
-        <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setMode('split')}
-            className={`rounded-md ${mode === 'split'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-700'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-              }`}
-          >
-            <Columns className="w-4 h-4" />
-            HTML + 미리보기
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setMode('html')}
-            className={`rounded-md ${mode === 'html'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-700'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-              }`}
-          >
-            <Code className="w-4 h-4" />
-            HTML 전체화면
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setMode('preview')}
-            className={`rounded-md ${mode === 'preview'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-700'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-              }`}
-          >
-            <Eye className="w-4 h-4" />
-            미리보기 전체화면
-          </Button>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+      {/* Action Buttons Row (대가성 문구 + 저장/원본복원) */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <DisclaimerButtons
             content={content}
             onInsert={(html) => handleContentChange(html + '\n' + content)}
+            isMobile={isMobile}
           />
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           {content !== originalContent.current && (
             <Button
               variant="outline"
+              size={isMobile ? 'sm' : 'default'}
               onClick={handleReset}
             >
               원본 복원
@@ -320,6 +366,7 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
           <Button
             onClick={handleSave}
             disabled={saving}
+            size={isMobile ? 'sm' : 'default'}
             className="bg-blue-600 hover:bg-blue-700"
           >
             {saving ? (
@@ -328,6 +375,50 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
               <Save className="w-4 h-4" />
             )}
             저장
+          </Button>
+        </div>
+      </div>
+
+      {/* Sticky Mode Tabs — Header(h-16=4rem) 아래 고정 */}
+      <div className="sticky top-16 z-30 bg-background/95 backdrop-blur-sm pb-2 -mx-1 px-1 pt-2 -mt-2">
+        <div className={`flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 ${isMobile ? 'w-full' : 'w-fit'}`}>
+          {!isMobile && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleModeChange('split')}
+              className={`rounded-md ${mode === 'split'
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-700'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                }`}
+            >
+              <Columns className="w-4 h-4" />
+              HTML + 미리보기
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleModeChange('html')}
+            className={`rounded-md ${isMobile ? 'flex-1' : ''} ${mode === 'html'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-700'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+          >
+            <Code className="w-4 h-4" />
+            {isMobile ? '코드' : 'HTML 전체화면'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleModeChange('preview')}
+            className={`rounded-md ${isMobile ? 'flex-1' : ''} ${mode === 'preview'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-700'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+          >
+            <Eye className="w-4 h-4" />
+            {isMobile ? '미리보기' : '미리보기 전체화면'}
           </Button>
         </div>
       </div>
@@ -347,16 +438,33 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
         </div>
       )}
 
-      {/* Editor Area */}
-      {mode === 'html' && (
-        <div className="min-h-[700px]">
-          <HtmlCodeEditor content={content} onChange={handleContentChange} />
-        </div>
-      )}
+      {/* Editor (항상 마운트, display toggle — 스크롤 위치 보존) */}
+      <div style={{ display: mode === 'html' ? 'block' : 'none' }}>
+        <HtmlCodeEditor
+          ref={htmlEditorRef}
+          content={content}
+          onChange={handleContentChange}
+          onScroll={handleHtmlEditorScroll}
+          height={editorHeight}
+          isMobile={isMobile}
+        />
+      </div>
 
-      {/* Split View: HTML + Preview */}
+      {/* Preview (항상 마운트, display toggle — 스크롤 위치 보존) */}
+      <div
+        ref={previewRef}
+        className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 overflow-auto"
+        style={{ display: mode === 'preview' ? 'block' : 'none', height: editorHeight }}
+      >
+        <div
+          className="max-w-none text-gray-900 dark:text-gray-100"
+          dangerouslySetInnerHTML={{ __html: previewContent }}
+        />
+      </div>
+
+      {/* Split View: HTML + Preview (desktop only) */}
       {mode === 'split' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="min-h-[700px]">
             <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">HTML 코드</div>
             <HtmlCodeEditor
@@ -364,12 +472,14 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
               onChange={handleContentChange}
               onScroll={handleEditorScroll}
               onCursorLineChange={handleCursorLineChange}
+              height="700px"
+              isMobile={false}
             />
           </div>
           <div className="min-h-[700px]">
             <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">미리보기</div>
             <div
-              ref={previewRef}
+              ref={splitPreviewRef}
               className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 h-[700px] overflow-auto"
             >
               <div
@@ -378,18 +488,6 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
               />
             </div>
           </div>
-        </div>
-      )}
-
-      {mode === 'preview' && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 min-h-[700px]">
-          <div
-            className="max-w-none text-gray-900 dark:text-gray-100"
-            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content, {
-              ADD_ATTR: ['target', 'rel', 'style'],
-              ADD_TAGS: ['iframe'],
-            }) }}
-          />
         </div>
       )}
     </div>

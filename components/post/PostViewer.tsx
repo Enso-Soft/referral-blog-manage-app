@@ -35,10 +35,10 @@ export function PostViewer({ content }: PostViewerProps) {
   return (
     <div>
       {/* 너비 조절 툴바 */}
-      <div className="mb-4 px-6 py-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-4 flex-wrap">
+      <div className="mb-4 px-4 md:px-6 py-3 md:py-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-3 md:gap-4 flex-wrap">
           <span className="text-sm font-medium text-gray-600 dark:text-gray-400 shrink-0">
-            📐 본문 너비
+            📐 <span className="hidden md:inline">본문 </span>너비
           </span>
           <input
             type="range"
@@ -47,17 +47,17 @@ export function PostViewer({ content }: PostViewerProps) {
             step={10}
             value={width ?? 1200}
             onChange={(e) => handleWidthChange(Number(e.target.value))}
-            className="flex-1 min-w-[120px] max-w-[240px] h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            className="hidden md:block flex-1 min-w-[120px] max-w-[240px] h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
           />
-          <span className="text-sm font-mono text-gray-500 dark:text-gray-400 w-16 text-right shrink-0">
+          <span className="hidden md:block text-sm font-mono text-gray-500 dark:text-gray-400 w-16 text-right shrink-0">
             {width === null || width === 0 ? '전체' : `${width}px`}
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-1 md:flex-none">
             {PRESETS.map((preset) => (
               <button
                 key={preset.label}
                 onClick={() => handleWidthChange(preset.value)}
-                className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                className={`flex-1 md:flex-none px-3 py-1 text-xs font-medium rounded-full transition-colors ${
                   width !== null && width === preset.value
                     ? 'bg-blue-500 text-white'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
