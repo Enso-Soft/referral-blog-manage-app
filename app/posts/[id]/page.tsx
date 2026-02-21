@@ -531,7 +531,7 @@ function PostDetail() {
                     />
                   ) : (
                     <Badge className="bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
-                      초안
+                      미발행
                     </Badge>
                   )}
 
@@ -555,7 +555,7 @@ function PostDetail() {
                     ) : (
                       <>
                         <RotateCcw className="w-3.5 h-3.5" />
-                        <span>초안으로</span>
+                        <span>미발행으로</span>
                       </>
                     )}
                   </Button>

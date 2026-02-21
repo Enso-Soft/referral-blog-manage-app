@@ -232,9 +232,9 @@ export function ProductSearchSheet({ isOpen, onClose, onSelect }: ProductSearchS
         {/* 드래그 핸들 */}
         <div
           ref={dragHandleRef}
-          className="flex justify-center py-3 cursor-grab active:cursor-grabbing"
+          className="flex justify-center py-3 cursor-grab active:cursor-grabbing touch-none"
         >
-          <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
+          <div className="w-10 h-1 bg-muted rounded-full" />
         </div>
 
         {/* 헤더 */}

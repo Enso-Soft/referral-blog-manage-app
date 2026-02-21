@@ -233,18 +233,18 @@ export function RichCopyButton({ content, className = '' }: CopyButtonProps) {
           {/* 모바일: 바텀시트 */}
           <div
             ref={mobileSheetRef}
-            className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 rounded-t-2xl z-50"
+            className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border rounded-t-2xl z-50"
           >
             {/* 드래그 핸들 — p-4 없이 직접 배치해서 responsive-dialog와 동일한 간격 */}
             <div
               ref={dragHandleRef}
-              className="flex justify-center py-3 cursor-grab active:cursor-grabbing"
+              className="flex justify-center py-3 cursor-grab active:cursor-grabbing touch-none"
             >
-              <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
+              <div className="w-10 h-1 bg-muted rounded-full" />
             </div>
-            <div className="flex items-start gap-3 mb-4 px-4">
-              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+            <div className="flex flex-col items-center gap-2 mb-4 px-4 pt-2 text-center">
+              <AlertTriangle className="w-6 h-6 text-amber-500" />
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 에디터에 따라 서식이 다르게 표시될 수 있습니다.
                 정확한 결과를 원하시면 <strong>HTML 복사</strong> 후 HTML 모드에 붙여넣기를 권장합니다.
               </p>
@@ -268,7 +268,7 @@ export function RichCopyButton({ content, className = '' }: CopyButtonProps) {
           {/* 데스크톱: 팝오버 */}
           <div
             ref={desktopPopoverRef}
-            className="hidden md:block w-72 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50"
+            className="hidden md:block w-72 p-4 bg-background border border-border rounded-xl shadow-lg z-50"
             style={getPopoverStyle()}
           >
             <div className="flex items-start gap-2.5 mb-3">

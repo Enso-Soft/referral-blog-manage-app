@@ -77,27 +77,27 @@ export function PublishedBadge({ wordpress, publishedUrls, publishedUrl, classNa
 
   if (total === 1) {
     return (
-      <span className={cn('flex items-center gap-1.5', className)}>
-        {current.favicon && (
+      <span className={cn('flex items-center gap-1', className)}>
+        {current.favicon ? (
           <img
             src={current.favicon}
             alt=""
             className="w-3.5 h-3.5 rounded-sm bg-white"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
+        ) : (
+          <span className="w-3.5 h-3.5 rounded-sm bg-white/30 flex-shrink-0" />
         )}
-        발행됨
       </span>
     )
   }
 
-  // Grid overlay: ghost and animated content share the same cell
+  // Multi-site: [favicon 1/N] with rotation
   return (
     <span className={cn('inline-grid overflow-hidden', className)}>
       {/* Ghost: invisible, holds width stable */}
-      <span className="col-start-1 row-start-1 flex items-center gap-1.5 invisible" aria-hidden>
+      <span className="col-start-1 row-start-1 flex items-center gap-1 invisible" aria-hidden>
         <span className="w-3.5 h-3.5 flex-shrink-0" />
-        <span>발행됨</span>
         <span className="text-[10px]">{total}/{total}</span>
       </span>
       {/* Animated content in same cell */}
@@ -108,17 +108,18 @@ export function PublishedBadge({ wordpress, publishedUrls, publishedUrl, classNa
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -14, opacity: 0 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          className="col-start-1 row-start-1 flex items-center gap-1.5"
+          className="col-start-1 row-start-1 flex items-center gap-1"
         >
-          {current.favicon && (
+          {current.favicon ? (
             <img
               src={current.favicon}
               alt=""
               className="w-3.5 h-3.5 rounded-sm bg-white"
               onError={(e) => { e.currentTarget.style.display = 'none' }}
             />
+          ) : (
+            <span className="w-3.5 h-3.5 rounded-sm bg-white/30 flex-shrink-0" />
           )}
-          <span>발행됨</span>
           <span className="opacity-70 text-[10px]">{idx + 1}/{total}</span>
         </motion.span>
       </AnimatePresence>

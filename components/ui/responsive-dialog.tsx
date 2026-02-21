@@ -114,7 +114,7 @@ function DialogContent({
         {/* 드래그 핸들 — 모바일에서만 표시, 넓은 터치 영역 */}
         <div
           ref={dragHandleRef}
-          className="sm:hidden flex justify-center py-3 cursor-grab active:cursor-grabbing"
+          className="sm:hidden flex justify-center py-3 cursor-grab active:cursor-grabbing touch-none"
         >
           <div className="w-10 h-1 bg-muted rounded-full" />
         </div>

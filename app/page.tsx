@@ -263,7 +263,7 @@ function PostList() {
                       : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                   )}
                 >
-                  {status === 'all' ? '전체 상태' : status === 'draft' ? '초안' : '발행됨'}
+                  {status === 'all' ? '전체 상태' : status === 'draft' ? '미발행' : '발행됨'}
                 </Button>
               ))}
             </div>
@@ -349,7 +349,7 @@ function PostList() {
               <p className="max-w-xs text-center mt-1">
                 {filter === 'all'
                   ? "첫 번째 블로그 글을 작성해보세요."
-                  : `현재 ${filter === 'draft' ? '초안' : '발행됨'} 상태의 글이 없습니다.`}
+                  : `현재 ${filter === 'draft' ? '미발행' : '발행됨'} 상태의 글이 없습니다.`}
               </p>
             </div>
           ) : (

@@ -7,10 +7,46 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
+function useBackButtonClose(
+  open: boolean | undefined,
+  onOpenChange: ((open: boolean) => void) | undefined
+) {
+  const pushedRef = React.useRef(false)
+  const onOpenChangeRef = React.useRef(onOpenChange)
+  onOpenChangeRef.current = onOpenChange
+
+  React.useEffect(() => {
+    if (!open) {
+      // 모달이 닫힐 때: pushState로 추가한 항목이 있으면 제거
+      if (pushedRef.current) {
+        pushedRef.current = false
+        history.back()
+      }
+      return
+    }
+
+    // 모달이 열릴 때: history에 상태 추가
+    history.pushState({ modal: true }, '')
+    pushedRef.current = true
+
+    const handlePopState = () => {
+      // 물리 백버튼 → 모달 닫기
+      pushedRef.current = false
+      onOpenChangeRef.current?.(false)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [open])
+}
+
 function Dialog({
+  open,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+  useBackButtonClose(open, onOpenChange)
+  return <DialogPrimitive.Root data-slot="dialog" open={open} onOpenChange={onOpenChange} {...props} />
 }
 
 function DialogTrigger({
@@ -155,4 +191,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  useBackButtonClose,
 }

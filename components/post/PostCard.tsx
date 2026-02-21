@@ -109,6 +109,21 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
                   <FileText className="w-8 h-8" />
                 </div>
               )}
+              {/* Status Badge Overlay */}
+              <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2">
+                {status === 'published' ? (
+                  <PublishedBadge
+                    wordpress={wordpressData}
+                    publishedUrls={publishedUrls}
+                    publishedUrl={post.publishedUrl}
+                    className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm border bg-green-600 text-white border-green-700"
+                  />
+                ) : (
+                  <Badge className="px-1.5 py-0.5 text-[10px] shadow-sm bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
+                    미발행
+                  </Badge>
+                )}
+              </div>
             </div>
 
             {/* Content */}
@@ -126,22 +141,9 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
                   {post.metadata?.wordCount && (
                     <span className="shrink-0">{post.metadata.wordCount.toLocaleString()}자</span>
                   )}
-                  {/* Status Badge */}
-                  {status === 'published' ? (
-                    <PublishedBadge
-                      wordpress={wordpressData}
-                      publishedUrls={publishedUrls}
-                      publishedUrl={post.publishedUrl}
-                      className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm border bg-green-600 text-white border-green-700"
-                    />
-                  ) : (
-                    <Badge className="px-1.5 py-0.5 text-[10px] shadow-sm bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
-                      초안
-                    </Badge>
-                  )}
-                  {/* Type badge - desktop only (mobile shows button below) */}
+                  {/* Type badge */}
                   <span className={cn(
-                    "hidden sm:inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full",
+                    "inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full",
                     type === 'affiliate'
                       ? "bg-indigo-600 text-white"
                       : "bg-slate-600 text-white"
@@ -175,7 +177,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
                   ) : (
                     <>
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span>초안으로</span>
+                      <span>미발행으로</span>
                     </>
                   )}
                 </Button>
@@ -184,7 +186,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
           </div>
 
           {/* Bottom: Action buttons - mobile only */}
-          <div className="sm:hidden px-3 pb-2.5 pt-0">
+          <div className="sm:hidden px-3 pb-2.5 pt-2.5">
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
@@ -208,7 +210,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
                 ) : (
                   <>
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span>초안으로</span>
+                    <span>미발행으로</span>
                   </>
                 )}
               </Button>
@@ -277,7 +279,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
               />
             ) : (
               <Badge className="backdrop-blur-md shadow-md bg-amber-500 text-white border-amber-600 hover:bg-amber-500">
-                초안
+                미발행
               </Badge>
             )}
 
@@ -352,7 +354,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
                 ) : (
                   <>
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span>초안으로</span>
+                    <span>미발행으로</span>
                   </>
                 )}
               </Button>
