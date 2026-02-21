@@ -8,7 +8,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/ui/responsive-dialog'
 import { Button } from '@/components/ui/button'
 
 const DISCLAIMERS = {
@@ -82,7 +82,7 @@ export function DisclaimerButtons({ content, onInsert, isMobile = false }: Discl
 
       {/* Confirm Modal */}
       <Dialog open={!!confirmKey} onOpenChange={(open) => { if (!open) setConfirmKey(null) }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>문구 중복 확인</DialogTitle>
             <DialogDescription>

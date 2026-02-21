@@ -29,8 +29,9 @@ export function SlidePanel({ isOpen, onClose, title, icon, children }: SlidePane
         onInteractOutside={(e) => e.preventDefault()}
         className="w-full md:w-[420px] sm:max-w-[420px] p-0 gap-0 flex flex-col"
       >
+
         {/* 헤더 */}
-        <SheetHeader className="px-4 py-3 bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-fuchsia-500/10 dark:from-violet-500/20 dark:via-purple-500/20 dark:to-fuchsia-500/20 border-b border-gray-200 dark:border-gray-800 flex-row items-center justify-between gap-0 space-y-0">
+        <SheetHeader className="px-4 py-3 sm:pt-3 pt-0 bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-fuchsia-500/10 dark:from-violet-500/20 dark:via-purple-500/20 dark:to-fuchsia-500/20 border-b border-gray-200 dark:border-gray-800 flex-row items-center justify-between gap-0 space-y-0">
           <div className="flex items-center gap-2">
             {icon && (
               <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white">

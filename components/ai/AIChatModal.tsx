@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { useBackButtonClose } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { useAIChat, type ChatMessage } from '@/hooks/useAIChat'
 
@@ -97,6 +98,9 @@ export function AIChatModal({ postId, isOpen, onClose }: AIChatModalProps) {
     handleKeyDown,
     findPreviousUserMessage,
   } = useAIChat({ postId, isOpen })
+
+  // 안드로이드 백버튼으로 모달 닫기
+  useBackButtonClose(isOpen, (open) => { if (!open) onClose() })
 
   // ESC 키 핸들링
   useEffect(() => {

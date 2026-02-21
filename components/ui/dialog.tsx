@@ -7,6 +7,12 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
+/**
+ * 프로그래밍적 history.back() 호출 시 다른 모달의 popstate 리스너가
+ * 이를 사용자의 실제 백 버튼으로 오인하지 않도록 카운터로 구분한다.
+ */
+let pendingBacks = 0
+
 function useBackButtonClose(
   open: boolean | undefined,
   onOpenChange: ((open: boolean) => void) | undefined
@@ -20,6 +26,7 @@ function useBackButtonClose(
       // 모달이 닫힐 때: pushState로 추가한 항목이 있으면 제거
       if (pushedRef.current) {
         pushedRef.current = false
+        pendingBacks++
         history.back()
       }
       return
@@ -30,7 +37,12 @@ function useBackButtonClose(
     pushedRef.current = true
 
     const handlePopState = () => {
-      // 물리 백버튼 → 모달 닫기
+      // 다른 모달이 프로그래밍적으로 history.back()을 호출한 경우 무시
+      if (pendingBacks > 0) {
+        pendingBacks--
+        return
+      }
+      // 실제 사용자 백 버튼 → 모달 닫기
       pushedRef.current = false
       onOpenChangeRef.current?.(false)
     }

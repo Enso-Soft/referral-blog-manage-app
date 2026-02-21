@@ -227,7 +227,7 @@ export function WPPublishedCards({
 
       {/* Delete confirmation modal */}
       <Dialog open={!!showDeleteModal} onOpenChange={(open) => { if (!open && !deleting) setShowDeleteModal(null) }}>
-        <DialogContent>
+        <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>WordPress 글 삭제</DialogTitle>
             <DialogDescription>

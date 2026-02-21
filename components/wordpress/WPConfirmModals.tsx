@@ -31,7 +31,7 @@ export function WPConfirmModals({
     <>
       {/* Overwrite confirmation modal */}
       <Dialog open={showOverwriteModal} onOpenChange={(open) => { if (!open) onOverwriteClose() }}>
-        <DialogContent>
+        <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>기존 글이 존재합니다</DialogTitle>
             <DialogDescription asChild>
@@ -72,7 +72,7 @@ export function WPConfirmModals({
 
       {/* No category confirmation modal */}
       <Dialog open={showNoCategoryModal} onOpenChange={(open) => { if (!open) onNoCategoryClose() }}>
-        <DialogContent>
+        <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>카테고리 미선택</DialogTitle>
             <DialogDescription asChild>

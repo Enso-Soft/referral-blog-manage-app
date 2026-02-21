@@ -225,8 +225,8 @@ function PostList() {
         </AnimatePresence>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          {/* Filter Groups */}
+        <div className="flex items-center">
+          {/* Left: Filter Groups */}
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Type Filter */}
             <div className="flex items-center gap-2 p-1 bg-secondary/50 rounded-xl w-fit">
@@ -269,8 +269,8 @@ function PostList() {
             </div>
           </div>
 
-          {/* View Mode Toggle */}
-          <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl w-fit self-start sm:self-auto">
+          {/* Right: View Mode Toggle */}
+          <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl w-fit ml-auto self-end">
             <Button
               variant="ghost"
               size="sm"

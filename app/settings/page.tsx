@@ -653,7 +653,7 @@ export default function SettingsPage() {
 
       {/* 재발급 확인 모달 */}
       <Dialog open={showConfirmModal} onOpenChange={(open) => { if (!open) setShowConfirmModal(false) }}>
-        <DialogContent>
+        <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>API 키 재발급</DialogTitle>
             <DialogDescription>정말 API 키를 재발급하시겠습니까?</DialogDescription>
@@ -676,7 +676,7 @@ export default function SettingsPage() {
       </Dialog>
       {/* Threads 연결 해제 확인 모달 */}
       <Dialog open={showDisconnectModal} onOpenChange={(open) => { if (!open) setShowDisconnectModal(false) }}>
-        <DialogContent>
+        <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Threads 연결 해제</DialogTitle>
             <DialogDescription>Threads 연결을 해제하면 더 이상 자동 포스팅이 불가능합니다. 계속하시겠습니까?</DialogDescription>
@@ -692,7 +692,7 @@ export default function SettingsPage() {
         const targetSite = showWpDisconnectModal ? wpSites.find(s => s.id === showWpDisconnectModal) : null
         return (
           <Dialog open={!!showWpDisconnectModal} onOpenChange={(open) => { if (!open) setShowWpDisconnectModal(null) }}>
-            <DialogContent>
+            <DialogContent showCloseButton={false}>
               <DialogHeader>
                 <DialogTitle>WordPress 연결 해제</DialogTitle>
                 <DialogDescription>

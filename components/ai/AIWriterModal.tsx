@@ -23,6 +23,7 @@ import {
 import { cn, resizeImageFile } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useBackButtonClose } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { formatRelativeTime } from '@/hooks/useAIWriteRequests'
@@ -55,12 +56,6 @@ interface SelectedProduct {
 const MAX_IMAGES = 10
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
 
-const EXAMPLE_PROMPTS = [
-  '올리브영 추천 화장품 10가지 소개',
-  '초보자를 위한 홈트레이닝 루틴',
-  '가성비 노트북 비교 리뷰',
-  '서울 근교 당일치기 여행지 추천',
-]
 
 export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLoading, hasMore, loadMore, latestCompletedRequest, clearLatestCompleted }: AIWriterModalProps) {
   const [isMounted, setIsMounted] = useState(false)
@@ -81,6 +76,9 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
 
   const { authFetch } = useAuthFetch()
 
+  // 안드로이드 백버튼으로 모달 닫기
+  useBackButtonClose(isOpen, (open) => { if (!open) onClose() })
+
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -94,7 +92,10 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+    const maxH = window.innerWidth < 640 ? window.innerHeight * 0.4 : 300
+    const clamped = Math.min(el.scrollHeight, maxH)
+    el.style.height = `${clamped}px`
+    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
   }, [prompt])
 
   // retryData가 변경되면 폼에 복원
@@ -390,7 +391,7 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
                       }}
                       placeholder="어떤 블로그 글을 작성할까요?"
                       rows={3}
-                      className="rounded-xl resize-none overflow-hidden"
+                      className="rounded-xl resize-none"
                     />
                     {prompt.length > 0 && (
                       <div className="mt-1.5 px-1">
@@ -400,21 +401,6 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
                       </div>
                     )}
                   </div>
-                  {/* 예시 프롬프트 칩 */}
-                  {!prompt && (
-                    <div className="flex flex-wrap gap-2">
-                      {EXAMPLE_PROMPTS.map((example, idx) => (
-                        <Button
-                          key={idx}
-                          variant="outline"
-                          onClick={() => setPrompt(example)}
-                          className="h-auto px-3 py-1.5 text-xs rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/40"
-                        >
-                          {example}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 {/* 이미지 첨부 */}

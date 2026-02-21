@@ -15,6 +15,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { DragHandle } from "@/components/ui/drag-handle"
+import { useDragToClose } from "@/hooks/useDragToClose"
 
 function DialogContent({
   className,
@@ -25,59 +27,10 @@ function DialogContent({
   showCloseButton?: boolean
 }) {
   const closeRef = React.useRef<HTMLButtonElement>(null)
-  const dragHandleRef = React.useRef<HTMLDivElement>(null)
-
-  // 드래그 닫기 — native addEventListener + passive:false
-  React.useEffect(() => {
-    const handle = dragHandleRef.current
-    if (!handle) return
-
-    let startY: number | null = null
-    let currentDelta = 0
-
-    const getDialogEl = () =>
-      handle.closest('[role="dialog"]') as HTMLElement | null
-
-    const onTouchStart = (e: TouchEvent) => {
-      startY = e.touches[0].clientY
-      currentDelta = 0
-    }
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (startY === null) return
-      e.preventDefault()
-      const delta = Math.max(0, e.touches[0].clientY - startY)
-      currentDelta = delta
-      const el = getDialogEl()
-      if (el) {
-        el.style.transform = `translateY(${delta}px)`
-        el.style.transition = 'none'
-      }
-    }
-
-    const onTouchEnd = () => {
-      const el = getDialogEl()
-      if (currentDelta > 100) {
-        if (el) { el.style.transform = ''; el.style.transition = '' }
-        closeRef.current?.click()
-      } else if (el) {
-        el.style.transform = ''
-        el.style.transition = ''
-      }
-      startY = null
-      currentDelta = 0
-    }
-
-    handle.addEventListener('touchstart', onTouchStart, { passive: true })
-    handle.addEventListener('touchmove', onTouchMove, { passive: false })
-    handle.addEventListener('touchend', onTouchEnd)
-
-    return () => {
-      handle.removeEventListener('touchstart', onTouchStart)
-      handle.removeEventListener('touchmove', onTouchMove)
-      handle.removeEventListener('touchend', onTouchEnd)
-    }
-  }, [])
+  const { dragHandleRef } = useDragToClose({
+    direction: 'y',
+    onClose: () => closeRef.current?.click(),
+  })
 
   return (
     <DialogPortal>
@@ -111,13 +64,8 @@ function DialogContent({
         )}
         {...props}
       >
-        {/* 드래그 핸들 — 모바일에서만 표시, 넓은 터치 영역 */}
-        <div
-          ref={dragHandleRef}
-          className="sm:hidden flex justify-center py-3 cursor-grab active:cursor-grabbing touch-none"
-        >
-          <div className="w-10 h-1 bg-muted rounded-full" />
-        </div>
+        {/* 드래그 핸들 — 모바일에서만 표시 */}
+        <DragHandle ref={dragHandleRef} className="sm:hidden" />
 
         <div className="grid gap-4 p-6 pt-2 pb-[calc(1.5rem_+_env(safe-area-inset-bottom,_0px))] sm:pt-6 sm:pb-6">
           {children}
