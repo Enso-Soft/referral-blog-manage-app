@@ -7,19 +7,12 @@ import { Loader2, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useInAppBrowser } from '@/hooks/useInAppBrowser'
 
-const BROWSER_NAMES: Record<string, string> = {
-  kakaotalk: '카카오톡',
-  naver: '네이버 앱',
-  instagram: '인스타그램',
-  facebook: '페이스북',
-  line: 'LINE',
-  other: '앱',
-}
-
 export default function LoginPage() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showInAppModal, setShowInAppModal] = useState(false)
+  const [stayedInApp, setStayedInApp] = useState(false)
   const { isInApp, browserType, isAndroid } = useInAppBrowser()
 
   useEffect(() => {
@@ -67,7 +60,7 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (isInApp) {
-      openExternalBrowser()
+      setShowInAppModal(true)
       return
     }
 
@@ -125,8 +118,6 @@ export default function LoginPage() {
     }
   }
 
-  const browserName = browserType ? (BROWSER_NAMES[browserType] ?? '앱') : ''
-
   return (
     <div className="min-h-[70vh] flex items-center justify-center">
       <div className="w-full max-w-md">
@@ -139,13 +130,10 @@ export default function LoginPage() {
             Google 계정으로 로그인하세요
           </p>
 
-          {isInApp && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 p-4 rounded-lg mb-6 text-sm">
-              <p className="font-semibold mb-1">외부 브라우저에서 로그인이 진행됩니다</p>
-              <p className="text-blue-600 dark:text-blue-400">
-                {browserName} 내에서는 Google 보안 정책으로 직접 로그인이 제한됩니다.
-                아래 버튼을 누르면 Chrome 또는 Safari에서 자동으로 로그인 페이지가 열립니다.
-              </p>
+          {stayedInApp && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm p-3 rounded-lg mb-4">
+              앱 내 브라우저에서는 Google 보안 정책으로 인해 로그인이 제한됩니다.
+              외부 브라우저(Chrome, Safari 등)에서 접속해 주세요.
             </div>
           )}
 
@@ -165,11 +153,6 @@ export default function LoginPage() {
               <>
                 <Loader2 className="w-5 h-5 animate-spin mr-2" />
                 로그인 중...
-              </>
-            ) : isInApp ? (
-              <>
-                <ExternalLink className="w-5 h-5 mr-2" />
-                외부 브라우저에서 Google 로그인
               </>
             ) : (
               <>
@@ -197,6 +180,49 @@ export default function LoginPage() {
           </Button>
         </div>
       </div>
+
+      {/* 인앱 브라우저 안내 모달 */}
+      {showInAppModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowInAppModal(false)}
+          />
+          <div className="relative w-full sm:max-w-sm bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem_+_env(safe-area-inset-bottom,_0px))] sm:pb-6 shadow-xl">
+            <div className="flex items-center justify-center w-12 h-12 bg-blue-100 dark:bg-blue-900/40 rounded-full mx-auto mb-4">
+              <ExternalLink className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 text-center mb-2">
+              외부 브라우저에서 로그인
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-6">
+              Google 로그인은 외부 브라우저(Chrome, Safari 등)에서 진행됩니다.
+              지금 이동하시겠어요?
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowInAppModal(false)
+                  setStayedInApp(true)
+                }}
+              >
+                여기에 있기
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  setShowInAppModal(false)
+                  openExternalBrowser()
+                }}
+              >
+                이동하기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -59,6 +59,8 @@ export function PostsProvider({ children }: { children: ReactNode }) {
     const cursorRef = useRef<DocumentSnapshot<DocumentData> | null>(null)
     // extraPosts 로드 여부 (onSnapshot이 커서를 덮어쓰지 않도록 보호)
     const hasLoadedExtraRef = useRef(false)
+    // loadMore 동시 호출 방어 (React state는 동기 업데이트 안 됨)
+    const loadingMoreRef = useRef(false)
 
     // Persistent state
     const [filter, setFilter] = useState<StatusFilter>('all')
@@ -105,7 +107,8 @@ export function PostsProvider({ children }: { children: ReactNode }) {
 
     // loadMore: 2페이지 이후 getDocs로 추가 데이터 가져오기
     const loadMore = useCallback(async () => {
-        if (loadingMore || !hasMore || !cursorRef.current) return
+        if (loadingMoreRef.current || !hasMore || !cursorRef.current) return
+        loadingMoreRef.current = true
         setLoadingMore(true)
 
         try {
@@ -142,9 +145,10 @@ export function PostsProvider({ children }: { children: ReactNode }) {
         } catch (err) {
             console.error('Failed to load more posts:', err)
         } finally {
+            loadingMoreRef.current = false
             setLoadingMore(false)
         }
-    }, [loadingMore, hasMore, buildConstraints])
+    }, [hasMore, buildConstraints])
 
     // Firestore 구독 (1페이지만 — filter, typeFilter 의존성)
     useEffect(() => {
@@ -181,11 +185,13 @@ export function PostsProvider({ children }: { children: ReactNode }) {
                         return data
                     }) as BlogPost[]
                     setRawPosts(posts)
-                    setHasMore(snapshot.docs.length >= PAGE_SIZE)
 
-                    // 커서 업데이트: extraPosts가 없을 때만 (추가 로드 후에는 커서 보존)
-                    if (!hasLoadedExtraRef.current && snapshot.docs.length > 0) {
-                        cursorRef.current = snapshot.docs[snapshot.docs.length - 1]
+                    // hasMore·커서 업데이트: extraPosts 로드 전에만 (추가 로드 후에는 보존)
+                    if (!hasLoadedExtraRef.current) {
+                        setHasMore(snapshot.docs.length >= PAGE_SIZE)
+                        if (snapshot.docs.length > 0) {
+                            cursorRef.current = snapshot.docs[snapshot.docs.length - 1]
+                        }
                     }
 
                     setLoading(false)
@@ -208,18 +214,49 @@ export function PostsProvider({ children }: { children: ReactNode }) {
         }
     }, [user?.uid, isAdmin, authLoading, filter, typeFilter, buildConstraints])
 
-    // 글 삭제 시 로컬 상태에서 즉시 제거 (optimistic removal)
+    // 글 삭제 시 로컬 상태에서 즉시 제거 (optimistic removal) + 빈자리 보충
     const removePost = useCallback((postId: string) => {
         setRawPosts(prev => prev.filter(p => p.id !== postId))
         setExtraPosts(prev => prev.filter(p => p.id !== postId))
-    }, [])
 
-    // 최종 posts: rawPosts + extraPosts (ID 기반 중복 제거)
+        // 추가 페이지가 로드된 상태이고 커서가 있으면, 1개를 보충 fetch
+        if (hasLoadedExtraRef.current && cursorRef.current) {
+            const db = getFirebaseDb()
+            const postsRef = collection(db, 'blog_posts')
+            const constraints = buildConstraints()
+            const q = query(
+                postsRef,
+                ...constraints,
+                startAfter(cursorRef.current),
+                limit(1)
+            )
+            getDocs(q).then((snapshot) => {
+                if (snapshot.docs.length > 0) {
+                    const doc = snapshot.docs[0]
+                    const newPost = { id: doc.id, ...doc.data() } as BlogPost
+                    cursorRef.current = doc
+                    setExtraPosts(prev => [...prev, newPost])
+                } else {
+                    setHasMore(false)
+                }
+            }).catch((err) => {
+                console.error('Failed to fill after remove:', err)
+            })
+        }
+    }, [buildConstraints])
+
+    // 최종 posts: rawPosts + extraPosts (ID 기반 중복 제거, extraPosts 내부 중복 포함)
     const posts = useMemo(() => {
         if (extraPosts.length === 0) return rawPosts
 
         const seenIds = new Set(rawPosts.map(p => p.id))
-        const dedupedExtra = extraPosts.filter(p => !seenIds.has(p.id))
+        const dedupedExtra: BlogPost[] = []
+        for (const p of extraPosts) {
+            if (!seenIds.has(p.id)) {
+                seenIds.add(p.id)  // extraPosts 내부 중복도 방어
+                dedupedExtra.push(p)
+            }
+        }
         return [...rawPosts, ...dedupedExtra]
     }, [rawPosts, extraPosts])
 

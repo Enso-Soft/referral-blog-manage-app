@@ -12,12 +12,15 @@ import { AIRequestSection } from '@/components/ai/AIRequestCard'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { usePosts } from '@/hooks/usePosts'
 import { useAIWriteRequests } from '@/hooks/useAIWriteRequests'
-import { Loader2, AlertCircle, FileX, Sparkles } from 'lucide-react'
+import { Loader2, AlertCircle, FileX, Sparkles, LayoutGrid, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { AIWriteRequest } from '@/lib/schemas/aiRequest'
 
 type StatusFilter = 'all' | 'draft' | 'published'
+type ViewMode = 'grid' | 'list'
+
+const VIEW_MODE_STORAGE_KEY = 'post-list-view-mode'
 
 function PostList() {
   const { posts, loading, error, filter, setFilter, typeFilter, setTypeFilter, loadingMore, hasMore, loadMore } = usePosts()
@@ -25,6 +28,15 @@ function PostList() {
   const { requests: aiRequests, loading: aiRequestsLoading, hasMore: aiHasMore, loadMore: aiLoadMore, latestCompletedRequest, clearLatestCompleted } = useAIWriteRequests()
   const [isAIModalOpen, setIsAIModalOpen] = useState(false)
   const [retryData, setRetryData] = useState<AIWriteRequest | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window === 'undefined') return 'grid'
+    return (localStorage.getItem(VIEW_MODE_STORAGE_KEY) as ViewMode) || 'grid'
+  })
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode)
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode)
+  }, [])
 
   // 무한스크롤: callback ref로 DOM mount/unmount를 정확히 추적
   const loadMoreRef = useRef(loadMore)
@@ -213,54 +225,87 @@ function PostList() {
         </AnimatePresence>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-        {/* Type Filter */}
-        <div className="flex items-center gap-2 p-1 bg-secondary/50 rounded-xl w-fit">
-          {(['all', 'general', 'affiliate'] as const).map((type) => (
-            <Button
-              key={type}
-              variant="ghost"
-              size="sm"
-              onClick={() => setTypeFilter(type)}
-              className={cn(
-                "rounded-lg capitalize",
-                typeFilter === type
-                  ? "bg-background text-foreground shadow-sm hover:bg-background"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-              )}
-            >
-              {type === 'all' ? '전체 글' : type === 'general' ? '일반' : '제휴'}
-            </Button>
-          ))}
-        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Filter Groups */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Type Filter */}
+            <div className="flex items-center gap-2 p-1 bg-secondary/50 rounded-xl w-fit">
+              {(['all', 'general', 'affiliate'] as const).map((type) => (
+                <Button
+                  key={type}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTypeFilter(type)}
+                  className={cn(
+                    "rounded-lg capitalize",
+                    typeFilter === type
+                      ? "bg-background text-foreground shadow-sm hover:bg-background"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                  )}
+                >
+                  {type === 'all' ? '전체 글' : type === 'general' ? '일반' : '제휴'}
+                </Button>
+              ))}
+            </div>
 
-        {/* Status Filter */}
-        <div className="flex items-center gap-2 p-1 bg-secondary/50 rounded-xl w-fit">
-          {(['all', 'draft', 'published'] as const).map((status) => (
+            {/* Status Filter */}
+            <div className="flex items-center gap-2 p-1 bg-secondary/50 rounded-xl w-fit">
+              {(['all', 'draft', 'published'] as const).map((status) => (
+                <Button
+                  key={status}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFilter(status)}
+                  className={cn(
+                    "rounded-lg capitalize",
+                    filter === status
+                      ? "bg-background text-foreground shadow-sm hover:bg-background"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                  )}
+                >
+                  {status === 'all' ? '전체 상태' : status === 'draft' ? '초안' : '발행됨'}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl w-fit self-start sm:self-auto">
             <Button
-              key={status}
               variant="ghost"
               size="sm"
-              onClick={() => setFilter(status)}
+              onClick={() => handleViewModeChange('grid')}
               className={cn(
-                "rounded-lg capitalize",
-                filter === status
+                "rounded-lg",
+                viewMode === 'grid'
                   ? "bg-background text-foreground shadow-sm hover:bg-background"
                   : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}
             >
-              {status === 'all' ? '전체 상태' : status === 'draft' ? '초안' : '발행됨'}
+              <LayoutGrid className="w-4 h-4" />
             </Button>
-          ))}
-        </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleViewModeChange('list')}
+              className={cn(
+                "rounded-lg",
+                viewMode === 'list'
+                  ? "bg-background text-foreground shadow-sm hover:bg-background"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+              )}
+            >
+              <List className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="min-h-[400px]">
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
+        {loading && viewMode === 'grid' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
               <div key={i} className="h-[380px] rounded-2xl bg-card border border-border shadow-sm p-4 space-y-4 animate-pulse">
                 <div className="w-full h-48 bg-secondary rounded-xl" />
                 <div className="space-y-2">
@@ -271,44 +316,72 @@ function PostList() {
               </div>
             ))}
           </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-20 text-destructive bg-destructive/5 rounded-2xl border border-destructive/20">
-            <AlertCircle className="w-10 h-10 mb-3" />
-            <span className="font-medium">{error}</span>
+        )}
+        {loading && viewMode === 'list' && (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <div key={i} className="flex items-center gap-0 h-[90px] rounded-2xl bg-card border border-border overflow-hidden animate-pulse">
+                <div className="w-[160px] h-full bg-secondary shrink-0" />
+                <div className="flex-1 px-4 py-3 flex flex-col gap-2">
+                  <div className="h-4 w-3/4 bg-secondary rounded" />
+                  <div className="h-3 w-1/3 bg-secondary/60 rounded" />
+                </div>
+                <div className="px-4 flex gap-2 shrink-0">
+                  <div className="h-7 w-16 bg-secondary rounded-lg" />
+                  <div className="h-7 w-16 bg-secondary rounded-lg" />
+                </div>
+              </div>
+            ))}
           </div>
-        ) : posts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-muted-foreground bg-secondary/20 rounded-3xl border border-dashed border-border">
-            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mb-4">
-              <FileX className="w-8 h-8 opacity-50" />
+        )}
+        {!loading && (
+          error ? (
+            <div className="flex flex-col items-center justify-center py-20 text-destructive bg-destructive/5 rounded-2xl border border-destructive/20">
+              <AlertCircle className="w-10 h-10 mb-3" />
+              <span className="font-medium">{error}</span>
             </div>
-            <h3 className="text-lg font-semibold text-foreground">등록된 글이 없습니다</h3>
-            <p className="max-w-xs text-center mt-1">
-              {filter === 'all'
-                ? "첫 번째 블로그 글을 작성해보세요."
-                : `현재 ${filter === 'draft' ? '초안' : '발행됨'} 상태의 글이 없습니다.`}
-            </p>
-          </div>
-        ) : (
-          <div onClickCapture={handleSaveScroll} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <AnimatePresence mode="popLayout">
-              {posts.map((post) => (
-                <motion.div
-                  key={post.id}
-                  layout={posts.length < LAYOUT_ANIMATION_THRESHOLD}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <PostCard
-                    post={post}
-                    onStatusChange={handleStatusChange}
-                    onTypeChange={handleTypeChange}
-                  />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
+          ) : posts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-muted-foreground bg-secondary/20 rounded-3xl border border-dashed border-border">
+              <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mb-4">
+                <FileX className="w-8 h-8 opacity-50" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">등록된 글이 없습니다</h3>
+              <p className="max-w-xs text-center mt-1">
+                {filter === 'all'
+                  ? "첫 번째 블로그 글을 작성해보세요."
+                  : `현재 ${filter === 'draft' ? '초안' : '발행됨'} 상태의 글이 없습니다.`}
+              </p>
+            </div>
+          ) : (
+            <div
+              key={viewMode}
+              onClickCapture={handleSaveScroll}
+              className={viewMode === 'grid'
+                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                : "space-y-3"
+              }
+            >
+              <AnimatePresence mode="popLayout">
+                {posts.map((post) => (
+                  <motion.div
+                    key={post.id}
+                    layout={posts.length < LAYOUT_ANIMATION_THRESHOLD}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <PostCard
+                      post={post}
+                      onStatusChange={handleStatusChange}
+                      onTypeChange={handleTypeChange}
+                      viewMode={viewMode}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )
         )}
 
         {/* 무한스크롤 트리거 */}

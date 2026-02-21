@@ -13,12 +13,9 @@ export function CopyButton({ content, className = '' }: CopyButtonProps) {
   const [copied, setCopied] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // cleanup timer on unmount
   useEffect(() => {
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-      }
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
@@ -26,10 +23,7 @@ export function CopyButton({ content, className = '' }: CopyButtonProps) {
     try {
       await navigator.clipboard.writeText(content)
       setCopied(true)
-      // 이전 타이머 정리
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-      }
+      if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
@@ -78,7 +72,6 @@ function simplifyStyledLinks(html: string): string {
     plainLink.textContent = url
     plainLink.style.fontSize = '20px'
 
-    // 부모가 래퍼 div (자식이 이 링크 하나뿐)이면 래퍼째 URL로 교체
     const parent = link.parentElement
     if (
       parent &&
@@ -99,8 +92,10 @@ export function RichCopyButton({ content, className = '' }: CopyButtonProps) {
   const [copied, setCopied] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-  const btnRef = useRef<HTMLButtonElement | null>(null)
-  const popoverRef = useRef<HTMLDivElement | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const mobileSheetRef = useRef<HTMLDivElement>(null)
+  const desktopPopoverRef = useRef<HTMLDivElement>(null)
+  const dragHandleRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     return () => {
@@ -108,32 +103,83 @@ export function RichCopyButton({ content, className = '' }: CopyButtonProps) {
     }
   }, [])
 
-  // 바깥 클릭 시 닫기 (버튼 + 팝오버 영역 제외)
+  // 바깥 클릭 시 닫기
   useEffect(() => {
     if (!showConfirm) return
-    const handleClick = (e: MouseEvent) => {
+    const handleMouseDown = (e: MouseEvent) => {
       const target = e.target as Node
       if (btnRef.current?.contains(target)) return
-      if (popoverRef.current?.contains(target)) return
+      if (mobileSheetRef.current?.contains(target)) return
+      if (desktopPopoverRef.current?.contains(target)) return
       setShowConfirm(false)
     }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [showConfirm])
+
+  // 드래그 닫기 — native addEventListener + passive:false 로 등록해야 동작함
+  useEffect(() => {
+    if (!showConfirm) return
+    const handle = dragHandleRef.current
+    const sheet = mobileSheetRef.current
+    if (!handle || !sheet) return
+
+    let startY: number | null = null
+    let currentDelta = 0
+
+    const onTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0].clientY
+      currentDelta = 0
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (startY === null) return
+      e.preventDefault() // passive:false 이기 때문에 가능 — 브라우저 스크롤 차단
+      const delta = Math.max(0, e.touches[0].clientY - startY)
+      currentDelta = delta
+      sheet.style.transform = `translateY(${delta}px)`
+      sheet.style.transition = 'none'
+    }
+
+    const onTouchEnd = () => {
+      if (currentDelta > 100) {
+        setShowConfirm(false)
+      } else {
+        sheet.style.transform = ''
+        sheet.style.transition = ''
+      }
+      startY = null
+      currentDelta = 0
+    }
+
+    handle.addEventListener('touchstart', onTouchStart, { passive: true })
+    handle.addEventListener('touchmove', onTouchMove, { passive: false })
+    handle.addEventListener('touchend', onTouchEnd)
+
+    return () => {
+      handle.removeEventListener('touchstart', onTouchStart)
+      handle.removeEventListener('touchmove', onTouchMove)
+      handle.removeEventListener('touchend', onTouchEnd)
+    }
   }, [showConfirm])
 
   const handleRichCopy = useCallback(async () => {
+    setShowConfirm(false)
     try {
       const simplified = simplifyStyledLinks(content)
-      const htmlBlob = new Blob([simplified], { type: 'text/html' })
       const tmp = document.createElement('div')
       tmp.innerHTML = simplified
-      const textBlob = new Blob([tmp.textContent || ''], { type: 'text/plain' })
 
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob }),
-      ])
+      if (typeof ClipboardItem !== 'undefined') {
+        const htmlBlob = new Blob([simplified], { type: 'text/html' })
+        const textBlob = new Blob([tmp.textContent || ''], { type: 'text/plain' })
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob }),
+        ])
+      } else {
+        await navigator.clipboard.writeText(tmp.textContent || '')
+      }
 
-      setShowConfirm(false)
       setCopied(true)
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => setCopied(false), 2000)
@@ -142,7 +188,6 @@ export function RichCopyButton({ content, className = '' }: CopyButtonProps) {
     }
   }, [content])
 
-  // 데스크톱 팝오버 위치 계산
   const getPopoverStyle = (): React.CSSProperties => {
     if (!btnRef.current) return {}
     const rect = btnRef.current.getBoundingClientRect()
@@ -180,19 +225,31 @@ export function RichCopyButton({ content, className = '' }: CopyButtonProps) {
       {showConfirm && createPortal(
         <>
           {/* 오버레이 */}
-          <div className="fixed inset-0 bg-black/40 z-40 md:bg-transparent" onClick={() => setShowConfirm(false)} />
+          <div
+            className="fixed inset-0 bg-black/40 z-40 md:bg-transparent"
+            onClick={() => setShowConfirm(false)}
+          />
 
           {/* 모바일: 바텀시트 */}
-          <div ref={popoverRef} className="md:hidden fixed bottom-0 left-0 right-0 p-4 pb-[env(safe-area-inset-bottom,16px)] bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 rounded-t-2xl z-50">
-            <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-4" />
-            <div className="flex items-start gap-3 mb-4">
+          <div
+            ref={mobileSheetRef}
+            className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 rounded-t-2xl z-50"
+          >
+            {/* 드래그 핸들 — p-4 없이 직접 배치해서 responsive-dialog와 동일한 간격 */}
+            <div
+              ref={dragHandleRef}
+              className="flex justify-center py-3 cursor-grab active:cursor-grabbing"
+            >
+              <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
+            </div>
+            <div className="flex items-start gap-3 mb-4 px-4">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                 에디터에 따라 서식이 다르게 표시될 수 있습니다.
                 정확한 결과를 원하시면 <strong>HTML 복사</strong> 후 HTML 모드에 붙여넣기를 권장합니다.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 px-4 pb-[calc(1rem_+_env(safe-area-inset-bottom,_0px))]">
               <button
                 onClick={() => setShowConfirm(false)}
                 className="flex-1 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl transition-colors"
@@ -209,7 +266,11 @@ export function RichCopyButton({ content, className = '' }: CopyButtonProps) {
           </div>
 
           {/* 데스크톱: 팝오버 */}
-          <div ref={popoverRef} className="hidden md:block w-72 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50" style={getPopoverStyle()}>
+          <div
+            ref={desktopPopoverRef}
+            className="hidden md:block w-72 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50"
+            style={getPopoverStyle()}
+          >
             <div className="flex items-start gap-2.5 mb-3">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">

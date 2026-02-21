@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Search, Loader2, Package } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -42,6 +42,56 @@ export function ProductSearchSheet({ isOpen, onClose, onSelect }: ProductSearchS
   const { authFetch } = useAuthFetch()
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const dragHandleRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+
+  // 드래그 닫기 — native addEventListener + passive:false
+  useEffect(() => {
+    if (!isOpen) return
+    const handle = dragHandleRef.current
+    const inner = innerRef.current
+    if (!handle || !inner) return
+
+    let startY: number | null = null
+    let currentDelta = 0
+
+    const onTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0].clientY
+      currentDelta = 0
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (startY === null) return
+      e.preventDefault()
+      const delta = Math.max(0, e.touches[0].clientY - startY)
+      currentDelta = delta
+      inner.style.transform = `translateY(${delta}px)`
+      inner.style.transition = 'none'
+    }
+
+    const onTouchEnd = () => {
+      if (currentDelta > 100) {
+        inner.style.transform = ''
+        inner.style.transition = ''
+        onClose()
+      } else {
+        inner.style.transform = ''
+        inner.style.transition = ''
+      }
+      startY = null
+      currentDelta = 0
+    }
+
+    handle.addEventListener('touchstart', onTouchStart, { passive: true })
+    handle.addEventListener('touchmove', onTouchMove, { passive: false })
+    handle.addEventListener('touchend', onTouchEnd)
+
+    return () => {
+      handle.removeEventListener('touchstart', onTouchStart)
+      handle.removeEventListener('touchmove', onTouchMove)
+      handle.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [isOpen, onClose])
 
   // 제품 로드 함수
   const loadProducts = useCallback(async (query: string, isLoadMore = false) => {
@@ -178,8 +228,12 @@ export function ProductSearchSheet({ isOpen, onClose, onSelect }: ProductSearchS
         showCloseButton={false}
         className="max-h-[85vh] flex flex-col rounded-t-2xl p-0 gap-0"
       >
+        <div ref={innerRef} className="flex flex-col flex-1 min-h-0">
         {/* 드래그 핸들 */}
-        <div className="flex justify-center pt-3 pb-2">
+        <div
+          ref={dragHandleRef}
+          className="flex justify-center py-3 cursor-grab active:cursor-grabbing"
+        >
           <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
         </div>
 
@@ -205,7 +259,7 @@ export function ProductSearchSheet({ isOpen, onClose, onSelect }: ProductSearchS
         </div>
 
         {/* 검색 결과 목록 */}
-        <div ref={listRef} className="flex-1 overflow-y-auto p-4">
+        <div ref={listRef} className="flex-1 overflow-y-auto p-4 pb-[calc(1rem_+_env(safe-area-inset-bottom,_0px))]">
           {loading && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -280,6 +334,7 @@ export function ProductSearchSheet({ isOpen, onClose, onSelect }: ProductSearchS
               )}
             </div>
           )}
+        </div>
         </div>
       </SheetContent>
     </Sheet>

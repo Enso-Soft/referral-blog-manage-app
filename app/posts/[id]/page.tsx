@@ -23,7 +23,7 @@ import { usePosts } from '@/hooks/usePosts'
 import { formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/responsive-dialog'
 import { Input } from '@/components/ui/input'
 import { isValidUrl, getFaviconUrl, extractImagesFromContent } from '@/lib/url-utils'
 import { normalizeWordPressData } from '@/lib/wordpress-api'
@@ -78,7 +78,7 @@ function PostDetail() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const { authFetch } = useAuthFetch()
-  const { removePost, hasMore, loadMore } = usePosts()
+  const { removePost } = usePosts()
 
   // 패널 열림 시 wrapper padding-right로 중앙 정렬 유지하며 공간 확보 (PC만)
   useEffect(() => {
@@ -405,7 +405,7 @@ function PostDetail() {
 
       if (data.success) {
         removePost(post.id)
-        if (hasMore) loadMore()
+        // loadMore 제거 — 목록 페이지 sentinel이 자동 처리
         router.push('/', { scroll: false })
       } else {
         setIsDeleting(false)
