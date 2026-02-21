@@ -73,7 +73,6 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
   // UI state
   const [isOptionsExpanded, setIsOptionsExpanded] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitPhase, setSubmitPhase] = useState<'idle' | 'sending'>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
   
   // Pagination state
@@ -228,7 +227,6 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
     }
 
     setIsSubmitting(true)
-    setSubmitPhase('sending')
     setSubmitError(null)
 
     try {
@@ -262,7 +260,6 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
       setSubmitError(err instanceof Error ? err.message : '요청 중 오류가 발생했습니다')
     } finally {
       setIsSubmitting(false)
-      setSubmitPhase('idle')
     }
   }
 

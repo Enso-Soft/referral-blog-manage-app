@@ -1,5 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: '/__/auth/:path*',
+        destination: 'https://referral-blog.firebaseapp.com/__/auth/:path*',
+      },
+    ]
+  },
   experimental: {
     optimizePackageImports: ['lucide-react', 'framer-motion', 'date-fns', 'firebase/firestore'],
   },

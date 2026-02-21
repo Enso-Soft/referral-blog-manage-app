@@ -4,6 +4,8 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   type User,
   type Auth,
 } from 'firebase/auth'
@@ -30,6 +32,20 @@ export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider()
   const result = await signInWithPopup(authInstance, provider)
   return result.user
+}
+
+// Google 로그인 (Redirect 방식 - 팝업 차단 폴백용)
+export async function signInWithGoogleRedirect() {
+  const authInstance = getAuthInstance()
+  const provider = new GoogleAuthProvider()
+  await signInWithRedirect(authInstance, provider)
+}
+
+// Redirect 로그인 결과 처리 (페이지 로드 시 호출)
+export async function getGoogleRedirectResult() {
+  const authInstance = getAuthInstance()
+  const result = await getRedirectResult(authInstance)
+  return result?.user ?? null
 }
 
 // 로그아웃
