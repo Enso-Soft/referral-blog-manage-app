@@ -78,7 +78,7 @@ function PostDetail() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const { authFetch } = useAuthFetch()
-  const { removePost } = usePosts()
+  const { removePost, updatePost } = usePosts()
 
   // 패널 열림 시 wrapper padding-right로 중앙 정렬 유지하며 공간 확보 (PC만)
   useEffect(() => {
@@ -340,13 +340,15 @@ function PostDetail() {
       })
       if (!res.ok) {
         console.error('Failed to update type')
+      } else {
+        updatePost(post.id, { postType: newType })
       }
     } catch (e) {
       console.error(e)
     } finally {
       setStatusChanging(false)
     }
-  }, [post?.id, post?.postType, statusChanging, authFetch])
+  }, [post?.id, post?.postType, statusChanging, authFetch, updatePost])
 
   const handleStatusChange = useCallback(async () => {
     if (!post?.id || statusChanging) return
@@ -363,13 +365,15 @@ function PostDetail() {
 
       if (!data.success) {
         console.error('Failed to update status')
+      } else {
+        updatePost(post.id, { status: newStatus })
       }
     } catch (err) {
       console.error(err)
     } finally {
       setStatusChanging(false)
     }
-  }, [post?.id, post?.status, statusChanging, authFetch])
+  }, [post?.id, post?.status, statusChanging, authFetch, updatePost])
 
   const handleDisclaimerInsert = useCallback(async (html: string) => {
     if (!post?.id) return

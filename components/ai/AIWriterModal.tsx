@@ -11,38 +11,31 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
-  CheckCircle,
-  XCircle,
-  Clock,
-  ExternalLink,
-  RotateCcw,
-  ChevronLeft,
-  ChevronRight,
   Trash2,
 } from 'lucide-react'
 import { cn, resizeImageFile } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useBackButtonClose } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/responsive-dialog'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
-import { formatRelativeTime } from '@/hooks/useAIWriteRequests'
 import {
   type AIWriteOptions,
   type AIWriteRequest,
 } from '@/lib/schemas/aiRequest'
 import { ProductCombobox } from '@/components/product/ProductCombobox'
-import Link from 'next/link'
 
 interface AIWriterModalProps {
   isOpen: boolean
   onClose: () => void
   retryData?: AIWriteRequest | null
-  // AI request data (부모에서 전달받아 이중 구독 방지)
-  requests: AIWriteRequest[]
-  requestsLoading: boolean
-  hasMore: boolean
-  loadMore: () => Promise<void>
   latestCompletedRequest: AIWriteRequest | null
   clearLatestCompleted: () => void
 }
@@ -54,10 +47,8 @@ interface SelectedProduct {
 }
 
 const MAX_IMAGES = 10
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
 
-
-export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLoading, hasMore, loadMore, latestCompletedRequest, clearLatestCompleted }: AIWriterModalProps) {
+export function AIWriterModal({ isOpen, onClose, retryData, latestCompletedRequest, clearLatestCompleted }: AIWriterModalProps) {
   const [isMounted, setIsMounted] = useState(false)
 
   // Form state
@@ -69,15 +60,39 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
   const [isOptionsExpanded, setIsOptionsExpanded] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 5
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
 
   const { authFetch } = useAuthFetch()
 
+  const hasContent = prompt.trim().length > 0 || images.length > 0 || selectedProducts.length > 0
+
+  const resetForm = useCallback(() => {
+    setPrompt('')
+    setImages(prev => {
+      prev.forEach(img => URL.revokeObjectURL(img.preview))
+      return []
+    })
+    setSelectedProducts([])
+    setSubmitError(null)
+    setIsOptionsExpanded(false)
+  }, [])
+
+  const handleRequestClose = useCallback(() => {
+    if (hasContent) {
+      setShowCloseConfirm(true)
+    } else {
+      onClose()
+    }
+  }, [hasContent, onClose])
+
+  const handleConfirmClose = useCallback(() => {
+    resetForm()
+    setShowCloseConfirm(false)
+    onClose()
+  }, [resetForm, onClose])
+
   // 안드로이드 백버튼으로 모달 닫기
-  useBackButtonClose(isOpen, (open) => { if (!open) onClose() })
+  useBackButtonClose(isOpen, (open) => { if (!open) handleRequestClose() })
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -102,7 +117,6 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
   useEffect(() => {
     if (retryData && isOpen) {
       setPrompt(retryData.prompt)
-      // 스크롤을 맨 위로
       setTimeout(() => {
         const modal = document.getElementById('ai-writer-modal-content')
         modal?.scrollTo({ top: 0, behavior: 'smooth' })
@@ -114,12 +128,10 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
   useEffect(() => {
     const audio = new Audio('/sounds/notification.mp3')
     audio.volume = 0.5
-    // 파일 존재 확인
     audio.addEventListener('canplaythrough', () => {
       audioRef.current = audio
     })
     audio.addEventListener('error', () => {
-      // 알림음 파일이 없으면 무시
       audioRef.current = null
     })
   }, [])
@@ -127,9 +139,7 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
   // 새로 완료된 요청 시 알림음
   useEffect(() => {
     if (latestCompletedRequest && isOpen) {
-      audioRef.current?.play().catch(() => {
-        // 자동 재생 차단 시 무시
-      })
+      audioRef.current?.play().catch(() => {})
       clearLatestCompleted()
     }
   }, [latestCompletedRequest, isOpen, clearLatestCompleted])
@@ -138,12 +148,16 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose()
+        if (showCloseConfirm) {
+          setShowCloseConfirm(false)
+        } else {
+          handleRequestClose()
+        }
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
+  }, [isOpen, showCloseConfirm, handleRequestClose])
 
   // Body scroll 막기
   useEffect(() => {
@@ -252,10 +266,7 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
         throw new Error(data.error || data.message || '요청에 실패했습니다')
       }
 
-      // 성공 시 폼 초기화 후 모달 닫기
-      setPrompt('')
-      setImages([])
-      setSelectedProducts([])
+      resetForm()
       onClose()
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : '요청 중 오류가 발생했습니다')
@@ -264,47 +275,9 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
     }
   }
 
-  // 삭제
-  const handleDelete = async (requestId: string) => {
-    try {
-      const res = await authFetch(`/api/ai/blog-writer?id=${requestId}`, {
-        method: 'DELETE',
-      })
-      const data = await res.json()
-      if (!data.success) {
-        throw new Error(data.error || '삭제에 실패했습니다')
-      }
-    } catch (err) {
-      console.error('Failed to delete request:', err)
-      throw err
-    }
-  }
+  if (!isMounted) return null
 
-  // 재시도
-  const handleRetry = async (request: AIWriteRequest) => {
-    setPrompt(request.prompt)
-    // 스크롤을 맨 위로
-    const modal = document.getElementById('ai-writer-modal-content')
-    modal?.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  // 페이지네이션 계산
-  const totalPages = Math.ceil(requests.length / itemsPerPage)
-  const paginatedRequests = requests.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
-
-  // 더 불러오기 (다음 페이지로 갈 때)
-  useEffect(() => {
-    if (currentPage === totalPages && hasMore) {
-      loadMore()
-    }
-  }, [currentPage, totalPages, hasMore, loadMore])
-
-  if (!isMounted || !isOpen) return null
-
-  return createPortal(
+  const portal = !isOpen ? null : createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -314,12 +287,12 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
-            onClick={onClose}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            onClick={handleRequestClose}
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -346,7 +319,7 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={onClose}
+                  onClick={handleRequestClose}
                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl"
                 >
                   <X className="w-5 h-5" />
@@ -356,7 +329,7 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
               {/* Content */}
               <div
                 id="ai-writer-modal-content"
-                className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6 [mask-image:linear-gradient(to_bottom,transparent,black_16px,black_calc(100%-16px),transparent)]"
+                className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6"
               >
                 {/* 에러 메시지 */}
                 <AnimatePresence>
@@ -390,8 +363,8 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
                         }
                       }}
                       placeholder="어떤 블로그 글을 작성할까요?"
-                      rows={3}
-                      className="rounded-xl resize-none"
+                      rows={6}
+                      className="rounded-xl resize-none min-h-[150px]"
                     />
                     {prompt.length > 0 && (
                       <div className="mt-1.5 px-1">
@@ -484,7 +457,6 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
                         transition={{ duration: 0.2 }}
                         className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700"
                       >
-                        {/* 제품 연동 */}
                         <div className="space-y-2">
                           <label className="text-sm text-gray-600 dark:text-gray-400">제품 연동</label>
                           <p className="text-xs text-gray-400 dark:text-gray-500">
@@ -500,64 +472,6 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </div>
-
-                {/* 요청 이력 */}
-                <div className="pt-6 border-t border-gray-200 dark:border-gray-700 space-y-4">
-                  <h3 className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    <Clock className="w-4 h-4" />
-                    요청 이력
-                  </h3>
-
-                  {requestsLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-                    </div>
-                  ) : requests.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 text-sm">
-                      아직 요청 이력이 없습니다
-                    </div>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        {paginatedRequests.map((req) => (
-                          <RequestHistoryItem
-                            key={req.id}
-                            request={req}
-                            onRetry={() => handleRetry(req)}
-                            onDelete={() => handleDelete(req.id)}
-                          />
-                        ))}
-                      </div>
-
-                      {/* 페이지네이션 */}
-                      {totalPages > 1 && (
-                        <div className="flex items-center justify-center gap-4 pt-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
-                            className="rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30"
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                          </Button>
-                          <span className="text-sm text-gray-500">
-                            {currentPage} / {totalPages}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage === totalPages && !hasMore}
-                            className="rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </>
-                  )}
                 </div>
               </div>
 
@@ -591,105 +505,31 @@ export function AIWriterModal({ isOpen, onClose, retryData, requests, requestsLo
           </div>
         </>
       )}
-    </AnimatePresence>
-    ,
+    </AnimatePresence>,
     document.body
   )
-}
-
-// 요청 이력 아이템 컴포넌트
-function RequestHistoryItem({
-  request,
-  onRetry,
-  onDelete,
-}: {
-  request: AIWriteRequest
-  onRetry: () => void
-  onDelete: () => Promise<void>
-}) {
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  const handleDelete = async () => {
-    setIsDeleting(true)
-    try {
-      await onDelete()
-    } finally {
-      setIsDeleting(false)
-    }
-  }
-  const statusConfig = {
-    pending: {
-      icon: <Loader2 className="w-4 h-4 animate-spin" />,
-      badge: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
-      label: '진행중',
-    },
-    success: {
-      icon: <CheckCircle className="w-4 h-4" />,
-      badge: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
-      label: '성공',
-    },
-    failed: {
-      icon: <XCircle className="w-4 h-4" />,
-      badge: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
-      label: '실패',
-    },
-  }
-
-  const config = statusConfig[request.status]
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
-      {/* Status Badge */}
-      <Badge variant="secondary" className={cn('rounded-md border-transparent', config.badge)}>
-        {config.icon}
-        {config.label}
-      </Badge>
+    <>
+      {portal}
 
-      {/* Prompt */}
-      <span className="flex-1 text-sm text-gray-700 dark:text-gray-300 truncate">
-        {request.prompt.length > 30 ? request.prompt.slice(0, 30) + '...' : request.prompt}
-      </span>
-
-      {/* Time */}
-      <span className="text-xs text-gray-400 whitespace-nowrap">
-        {formatRelativeTime(request.createdAt)}
-      </span>
-
-      {/* Action */}
-      {request.status === 'success' && request.resultPostId && (
-        <Link
-          href={`/posts/${request.resultPostId}`}
-          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/30 rounded-md transition-colors"
-        >
-          글 보기
-          <ExternalLink className="w-3 h-3" />
-        </Link>
-      )}
-      {request.status === 'failed' && (
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            onClick={onRetry}
-            className="h-auto px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md gap-1"
-          >
-            <RotateCcw className="w-3 h-3" />
-            재시도
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="h-auto px-2 py-1 text-xs font-medium text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md gap-1"
-          >
-            {isDeleting ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Trash2 className="w-3 h-3" />
-            )}
-            삭제
-          </Button>
-        </div>
-      )}
-    </div>
+      {/* 닫기 확인 — 모바일: 바텀시트, 데스크톱: 중앙 팝업 */}
+      <Dialog open={showCloseConfirm} onOpenChange={(open) => { if (!open) setShowCloseConfirm(false) }}>
+        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>작성 중인 내용이 있어요</DialogTitle>
+            <DialogDescription>닫으면 입력한 내용이 모두 초기화됩니다.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCloseConfirm(false)}>
+              계속 작성
+            </Button>
+            <Button onClick={handleConfirmClose} className="bg-red-500 hover:bg-red-600 text-white">
+              닫기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

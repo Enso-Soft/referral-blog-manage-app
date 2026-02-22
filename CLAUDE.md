@@ -313,6 +313,13 @@ Keyword research results from AI writing are saved in `blog_posts.seoAnalysis`.
 
 **Index configuration:** see `firestore.indexes.json`
 
+### Modal / Bottom Sheet Pattern
+
+- **Custom modal** (`createPortal` + Framer Motion, `z-50`) — primary task UIs. Centered on all screen sizes. See `AIWriterModal.tsx`.
+- **`responsive-dialog`** (`components/ui/responsive-dialog.tsx`, `z-50`) — yes/no confirmations only. Mobile: bottom sheet. Desktop: centered popup. See `WPConfirmModals.tsx`.
+
+> Both use `z-50`. Do NOT use higher z-index on custom modals — `responsive-dialog` will render behind it. Stacking is determined by DOM mount order.
+
 ### Editor Page UI Architecture
 
 UI structure of the post edit page (`/posts/[id]/edit`):

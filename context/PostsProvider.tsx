@@ -35,6 +35,7 @@ interface PostsContextType {
     typeFilter: TypeFilter
     setTypeFilter: (filter: TypeFilter) => void
     removePost: (postId: string) => void
+    updatePost: (postId: string, partial: Partial<BlogPost>) => void
     loadingMore: boolean
     hasMore: boolean
     loadMore: () => void
@@ -214,6 +215,14 @@ export function PostsProvider({ children }: { children: ReactNode }) {
         }
     }, [user?.uid, isAdmin, authLoading, filter, typeFilter, buildConstraints])
 
+    // 글 필드 변경 시 로컬 상태 즉시 반영 (rawPosts + extraPosts)
+    const updatePost = useCallback((postId: string, partial: Partial<BlogPost>) => {
+        const apply = (posts: BlogPost[]) =>
+            posts.map(p => p.id === postId ? { ...p, ...partial } : p)
+        setRawPosts(prev => apply(prev))
+        setExtraPosts(prev => apply(prev))
+    }, [])
+
     // 글 삭제 시 로컬 상태에서 즉시 제거 (optimistic removal) + 빈자리 보충
     const removePost = useCallback((postId: string) => {
         setRawPosts(prev => prev.filter(p => p.id !== postId))
@@ -270,11 +279,12 @@ export function PostsProvider({ children }: { children: ReactNode }) {
             typeFilter,
             setTypeFilter: handleSetTypeFilter,
             removePost,
+            updatePost,
             loadingMore,
             hasMore,
             loadMore,
         }),
-        [posts, loading, error, filter, handleSetFilter, typeFilter, handleSetTypeFilter, removePost, loadingMore, hasMore, loadMore]
+        [posts, loading, error, filter, handleSetFilter, typeFilter, handleSetTypeFilter, removePost, updatePost, loadingMore, hasMore, loadMore]
     )
 
     return (

@@ -25,7 +25,7 @@ const VIEW_MODE_STORAGE_KEY = 'post-list-view-mode'
 function PostList() {
   const { posts, loading, error, filter, setFilter, typeFilter, setTypeFilter, loadingMore, hasMore, loadMore } = usePosts()
   const { authFetch } = useAuthFetch()
-  const { requests: aiRequests, loading: aiRequestsLoading, hasMore: aiHasMore, loadMore: aiLoadMore, latestCompletedRequest, clearLatestCompleted } = useAIWriteRequests()
+  const { requests: aiRequests, latestCompletedRequest, clearLatestCompleted } = useAIWriteRequests()
   const [isAIModalOpen, setIsAIModalOpen] = useState(false)
   const [retryData, setRetryData] = useState<AIWriteRequest | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -397,10 +397,6 @@ function PostList() {
         isOpen={isAIModalOpen}
         onClose={handleCloseModal}
         retryData={retryData}
-        requests={aiRequests}
-        requestsLoading={aiRequestsLoading}
-        hasMore={aiHasMore}
-        loadMore={aiLoadMore}
         latestCompletedRequest={latestCompletedRequest}
         clearLatestCompleted={clearLatestCompleted}
       />
