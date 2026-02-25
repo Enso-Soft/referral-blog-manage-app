@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/components/layout/AuthProvider'
-import { Users, FileText, Package, TrendingUp, Clock, ArrowRight } from 'lucide-react'
+import { Users, FileText, Package, TrendingUp, Clock, ArrowRight, Coins } from 'lucide-react'
 import { formatDateFns } from '@/lib/utils'
 
 interface Stats {
@@ -174,7 +174,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 빠른 링크 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <Link
           href="/admin/users"
           className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm transition-all"
@@ -202,6 +202,22 @@ export default function AdminDashboardPage() {
             <div>
               <p className="font-medium text-gray-900 dark:text-gray-100">콘텐츠 관리</p>
               <p className="text-sm text-gray-500 dark:text-gray-400">모든 블로그 글 관리</p>
+            </div>
+          </div>
+          <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+        </Link>
+
+        <Link
+          href="/admin/credits"
+          className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-amber-300 dark:hover:border-amber-600 hover:shadow-sm transition-all"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg">
+              <Coins className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-900 dark:text-gray-100">크레딧 관리</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">크레딧 설정 및 유저 관리</p>
             </div>
           </div>
           <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500" />

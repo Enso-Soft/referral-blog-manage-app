@@ -41,4 +41,10 @@ export const queryKeys = {
     details: () => [...queryKeys.posts.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.posts.details(), id] as const,
   },
+  credits: {
+    all: ['credits'] as const,
+    balance: () => [...queryKeys.credits.all, 'balance'] as const,
+    transactions: (type?: string) =>
+      [...queryKeys.credits.all, 'transactions', type ?? null] as const,
+  },
 } as const

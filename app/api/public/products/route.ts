@@ -37,6 +37,7 @@ interface ProductData {
   name: string
   price?: number
   images?: string[]
+  detailImages?: string[]
   affiliateLink: string
   category1?: string
   category2?: string
@@ -365,6 +366,7 @@ export async function POST(request: NextRequest) {
       name: body.name,
       price: body.price || 0,
       images: body.images || [],
+      detailImages: body.detailImages || [],
       affiliateLink: body.affiliateLink,
       category: {
         level1: body.category1 || '',
@@ -447,6 +449,7 @@ export async function PATCH(request: NextRequest) {
     }
     if (body.price !== undefined) updateData.price = body.price
     if (body.images !== undefined) updateData.images = body.images
+    if (body.detailImages !== undefined) updateData.detailImages = body.detailImages
     if (body.affiliateLink !== undefined) updateData.affiliateLink = body.affiliateLink
     if (body.category1 !== undefined || body.category2 !== undefined || body.category3 !== undefined) {
       updateData.category = {

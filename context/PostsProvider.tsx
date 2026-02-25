@@ -158,6 +158,9 @@ export function PostsProvider({ children }: { children: ReactNode }) {
         if (!user) {
             setRawPosts([])
             setExtraPosts([])
+            cursorRef.current = null
+            hasLoadedExtraRef.current = false
+            setHasMore(false)
             setLoading(false)
             setError('로그인이 필요합니다')
             return
@@ -196,13 +199,11 @@ export function PostsProvider({ children }: { children: ReactNode }) {
                     }
 
                     setLoading(false)
-                    setLoadingMore(false)
                 },
                 (err) => {
                     console.error('Firestore subscription error:', err)
                     setError('데이터를 불러오는 중 오류가 발생했습니다')
                     setLoading(false)
-                    setLoadingMore(false)
                 }
             )
 

@@ -3,6 +3,8 @@ import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromApiKey } from '@/lib/auth-admin'
 import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
+import { settleAIRequest } from '@/lib/credit-operations'
+import { logger } from '@/lib/logger'
 
 // GET: AI 글 작성 요청 조회 (단건 또는 목록)
 export async function GET(request: NextRequest) {
@@ -162,6 +164,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     await docRef.update(updateData)
+
+    // 크레딧 정산: status가 success/failed로 변경되고, preCharge가 있고, 아직 정산되지 않았으면
+    if (
+      (body.status === 'success' || body.status === 'failed') &&
+      existingData.preCharge &&
+      !existingData.settlement?.settled
+    ) {
+      try {
+        const actualCost = body.actualCost ?? existingData.preCharge.totalAmount
+        await settleAIRequest(body.id, actualCost, body.status)
+      } catch (settleErr) {
+        logger.error(`[AI Requests] 크레딧 정산 실패 (requestId: ${body.id}):`, settleErr)
+      }
+    }
 
     // 기존 데이터 + 업데이트 데이터 merge로 응답 구성 (재조회 불필요)
     const mergedData = { ...existingData, ...updateData }

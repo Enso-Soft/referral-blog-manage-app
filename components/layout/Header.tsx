@@ -14,12 +14,14 @@ import {
   Menu,
   X,
   ChevronRight,
-  BookOpen
+  BookOpen,
+  Coins,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from './ThemeToggle'
 import { cn, throttle } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
+import { CreditPopover } from '@/components/credit/CreditPopover'
 
 // NavLink를 외부로 분리하여 메모이제이션
 const NavLink = memo(function NavLink({
@@ -50,7 +52,7 @@ const NavLink = memo(function NavLink({
 })
 
 export function Header() {
-  const { user, userProfile, loading, isAdmin } = useAuth()
+  const { user, userProfile, loading, isAdmin, totalCredit } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [isScrolled, setIsScrolled] = useState(false)
@@ -109,6 +111,7 @@ export function Header() {
             <div className="hidden md:flex items-center gap-1">
               <NavLink href="/" icon={BookOpen} active={pathname === '/'}>블로그</NavLink>
               <NavLink href="/products" icon={Package} active={pathname === '/products'}>제품</NavLink>
+              <NavLink href="/credits" icon={Coins} active={pathname === '/credits'}>크레딧</NavLink>
               {isAdmin && (
                 <NavLink href="/admin" icon={LayoutDashboard} active={pathname === '/admin'}>관리자</NavLink>
               )}
@@ -124,6 +127,7 @@ export function Header() {
             {!loading && (
               user ? (
                 <div className="flex items-center gap-3 pl-3 border-l border-border/40">
+                  <CreditPopover />
                   <div className="flex flex-col items-end">
                     <span className="text-sm font-medium leading-none">
                       {userProfile?.displayName || user.email?.split('@')[0]}
@@ -205,6 +209,13 @@ export function Header() {
                     </Link>
                     <Link href="/products" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
                       <span className="font-medium">제품 관리</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </Link>
+                    <Link href="/credits" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
+                      <div className="flex items-center gap-2">
+                        <Coins className="w-4 h-4 text-amber-500" />
+                        <span className="font-medium">{totalCredit.toLocaleString()} Credit</span>
+                      </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </Link>
                     {isAdmin && (

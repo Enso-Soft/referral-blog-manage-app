@@ -11,6 +11,7 @@ import { logger } from '@/lib/logger'
 import { CreateAIWriteRequestSchema } from '@/lib/schemas/aiRequest'
 import { validateImageBuffer } from '@/lib/file-validation'
 import { getS3Config } from '@/lib/env'
+import { getCreditSettings, deductCredits, settleAIRequest } from '@/lib/credit-operations'
 
 const AI_API_URL = process.env.AI_API_URL || 'https://api.enso-soft.xyz/v1/ai/blog-writer'
 
@@ -112,9 +113,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 크레딧 선결제
+    const settings = await getCreditSettings()
+    const preChargeAmount = settings.aiWritePreChargeAmount
+
+    let preChargeResult: Awaited<ReturnType<typeof deductCredits>>
+    try {
+      preChargeResult = await deductCredits(
+        auth.userId,
+        preChargeAmount,
+        'debit',
+        `AI 글 작성 선결제 (${preChargeAmount.toLocaleString()})`,
+        undefined,
+        'ai_write_request'
+      )
+    } catch (err: any) {
+      if (err.code === 'INSUFFICIENT_CREDIT') {
+        return NextResponse.json(
+          { success: false, error: '크레딧이 부족합니다. 충전 후 다시 시도해주세요.', code: 'INSUFFICIENT_CREDIT' },
+          { status: 402 }
+        )
+      }
+      throw err
+    }
+
     const now = Timestamp.now()
 
-    // Firestore에 요청 저장 (pending 상태)
+    // Firestore에 요청 저장 (pending 상태 + preCharge 정보)
     const initialProgressMessage = 'AI가 요청을 분석하고 있어요'
     const docData = {
       userId: auth.userId,
@@ -125,10 +150,21 @@ export async function POST(request: NextRequest) {
       status: 'pending' as const,
       progressMessage: initialProgressMessage,
       progressMessages: [{ message: initialProgressMessage, timestamp: now }],
+      preCharge: {
+        totalAmount: preChargeAmount,
+        sCreditCharged: preChargeResult.sCreditUsed,
+        eCreditCharged: preChargeResult.eCreditUsed,
+        transactionId: preChargeResult.transactionId,
+      },
       createdAt: now,
     }
 
     const docRef = await db.collection('ai_write_requests').add(docData)
+
+    // 선결제 트랜잭션에 referenceId 업데이트
+    await db.collection('credit_transactions').doc(preChargeResult.transactionId).update({
+      referenceId: docRef.id,
+    })
 
     // AI API 호출 (base64 이미지 전달 — 백엔드 호환)
     await callAIApi(docRef.id, { ...validatedData, images: imageBase64s }, auth.userId, userApiKey)
@@ -195,6 +231,17 @@ async function callAIApi(
       errorMessage: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다',
       completedAt: Timestamp.now(),
     })
+    // AI API 호출 실패 시 즉시 정산 (전액 환급)
+    try {
+      await settleAIRequest(requestId, 0, 'failed')
+    } catch (settleErr) {
+      logger.error('[AI API] 정산(환급) 실패:', settleErr)
+      // 정산 실패를 문서에 기록 → Admin에서 조회 가능
+      await requestRef.update({
+        'settlement.error': settleErr instanceof Error ? settleErr.message : '정산 실패',
+        'settlement.failedAt': Timestamp.now(),
+      }).catch(() => {}) // 이 업데이트 자체가 실패해도 무시
+    }
   }
 }
 
@@ -257,6 +304,15 @@ export async function DELETE(request: NextRequest) {
     // 본인 요청인지 확인
     const requestData = requestDoc.data()
     requirePermission(auth.userId === requestData?.userId, '권한이 없습니다')
+
+    // 미정산 선결제가 있으면 환불 처리
+    if (requestData?.preCharge && !requestData?.settlement?.settled) {
+      try {
+        await settleAIRequest(requestId, 0, 'failed')
+      } catch (err) {
+        logger.error('[AI DELETE] 환불 실패:', err)
+      }
+    }
 
     // 영구 삭제
     await requestRef.delete()

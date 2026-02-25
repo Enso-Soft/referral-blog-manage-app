@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto'
 import { getDb } from '@/lib/firebase-admin'
 import { verifyIdToken } from '@/lib/auth-admin'
 import { logger } from '@/lib/logger'
+import { getCreditSettings } from '@/lib/credit-operations'
 
 // API 키 생성 함수
 function generateApiKey(): string {
@@ -38,15 +39,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '이미 등록됨' })
     }
 
-    // users 문서 생성 (API 키 포함)
+    const settings = await getCreditSettings()
     const apiKey = generateApiKey()
-    await userRef.set({
+    const now = Timestamp.now()
+
+    // users 문서 생성 + 크레딧 초기화 + signup_grant 로그 (배치 쓰기)
+    const batch = db.batch()
+    const txnRef = db.collection('credit_transactions').doc()
+
+    batch.set(userRef, {
       email: decodedToken.email,
       displayName: displayName || null,
       role: 'user',
       apiKey,
-      createdAt: Timestamp.now(),
+      sCredit: settings.signupGrantAmount,
+      eCredit: 0,
+      createdAt: now,
     })
+
+    batch.set(txnRef, {
+      userId: decodedToken.uid,
+      type: 'credit',
+      sCreditDelta: settings.signupGrantAmount,
+      eCreditDelta: 0,
+      sCreditAfter: settings.signupGrantAmount,
+      eCreditAfter: 0,
+      description: `회원가입 ${settings.signupGrantAmount.toLocaleString()} S'Credit 지급`,
+      createdAt: now,
+    })
+
+    await batch.commit()
 
     return NextResponse.json({ success: true })
   } catch (error) {

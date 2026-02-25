@@ -177,6 +177,19 @@ export const AIWriteRequestSchema = z.object({
   completedAt: TimestampSchema.optional(),
   /** 카드 숨김 여부 (사용자가 X 버튼 클릭 시 true) */
   dismissed: z.boolean().optional(),
+  /** 크레딧 선결제 정보 */
+  preCharge: z.object({
+    totalAmount: z.number(),
+    sCreditCharged: z.number(),
+    eCreditCharged: z.number(),
+    transactionId: z.string(),
+  }).optional(),
+  /** 크레딧 정산 정보 */
+  settlement: z.object({
+    actualCost: z.number(),
+    settled: z.boolean(),
+    settlementTransactionId: z.string().optional(),
+  }).optional(),
 })
 
 export type AIWriteRequest = z.infer<typeof AIWriteRequestSchema>

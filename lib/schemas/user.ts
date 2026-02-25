@@ -24,6 +24,11 @@ export interface FirestoreUserData {
   wpAppPassword?: string
   wpDisplayName?: string
 
+  // --- 크레딧 ---
+  sCredit?: number
+  eCredit?: number
+  lastCheckIn?: unknown // Firestore Timestamp
+
   // --- Threads 연동 ---
   threadsAccessToken?: string
   threadsTokenExpiresAt?: { toDate?: () => Date } // Firestore Timestamp

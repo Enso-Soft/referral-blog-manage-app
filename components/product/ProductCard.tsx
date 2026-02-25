@@ -70,7 +70,7 @@ export function ProductCard({ product }: ProductCardProps) {
   return (
     <div className="bg-card dark:bg-slate-800 rounded-xl border border-border dark:border-slate-700 overflow-hidden hover:shadow-lg hover:border-indigo-500/50 transition-all duration-300 flex flex-col">
       {/* Thumbnail with Slider */}
-      <div className="h-60 bg-secondary/50 relative group flex-shrink-0">
+      <div className="aspect-square bg-secondary/50 relative group flex-shrink-0">
         {images.length > 0 ? (
           <img
             src={images[currentImageIndex]}

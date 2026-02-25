@@ -26,11 +26,14 @@ import {
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
+import { useAuth } from '@/components/layout/AuthProvider'
 import {
   type AIWriteOptions,
   type AIWriteRequest,
 } from '@/lib/schemas/aiRequest'
+import { DEFAULT_CREDIT_SETTINGS } from '@/lib/schemas/credit'
 import { ProductCombobox } from '@/components/product/ProductCombobox'
+import Link from 'next/link'
 
 interface AIWriterModalProps {
   isOpen: boolean
@@ -476,31 +479,11 @@ export function AIWriterModal({ isOpen, onClose, retryData, latestCompletedReque
               </div>
 
               {/* 요청하기 버튼 (하단 고정) */}
-              <div className="flex-shrink-0 px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                <Button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || !prompt.trim()}
-                  className={cn(
-                    'w-full h-auto py-4 rounded-xl font-semibold text-white',
-                    'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
-                    'hover:from-violet-600 hover:via-purple-600 hover:to-fuchsia-600',
-                    'shadow-lg hover:shadow-xl hover:scale-[1.02]',
-                    'gap-2'
-                  )}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      AI 서버에 요청 전달 중...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5" />
-                      요청하기
-                    </>
-                  )}
-                </Button>
-              </div>
+              <CreditFooter
+                isSubmitting={isSubmitting}
+                isPromptEmpty={!prompt.trim()}
+                onSubmit={handleSubmit}
+              />
             </motion.div>
           </div>
         </>
@@ -531,5 +514,64 @@ export function AIWriterModal({ isOpen, onClose, retryData, latestCompletedReque
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+/** 비용/잔액 표시가 포함된 제출 Footer */
+function CreditFooter({
+  isSubmitting,
+  isPromptEmpty,
+  onSubmit,
+}: {
+  isSubmitting: boolean
+  isPromptEmpty: boolean
+  onSubmit: () => void
+}) {
+  const { totalCredit } = useAuth()
+  const cost = DEFAULT_CREDIT_SETTINGS.aiWritePreChargeAmount
+  const isInsufficient = totalCredit < cost
+
+  return (
+    <div className="flex-shrink-0 px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+      {/* 비용/잔액 라인 */}
+      <div className={cn(
+        'flex items-center justify-between text-sm mb-3 px-1',
+        isInsufficient ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'
+      )}>
+        <span>소요 {cost.toLocaleString()}</span>
+        <span>
+          잔액 {totalCredit.toLocaleString()}
+          {isInsufficient && (
+            <Link href="/credits" className="text-blue-500 ml-2 text-xs hover:underline">충전하기</Link>
+          )}
+        </span>
+      </div>
+
+      <Button
+        onClick={onSubmit}
+        disabled={isSubmitting || isPromptEmpty || isInsufficient}
+        className={cn(
+          'w-full h-auto py-4 rounded-xl font-semibold text-white',
+          'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500',
+          'hover:from-violet-600 hover:via-purple-600 hover:to-fuchsia-600',
+          'shadow-lg hover:shadow-xl hover:scale-[1.02]',
+          'gap-2'
+        )}
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            AI 서버에 요청 전달 중...
+          </>
+        ) : isInsufficient ? (
+          '크레딧이 부족합니다'
+        ) : (
+          <>
+            <Sparkles className="w-5 h-5" />
+            요청하기
+          </>
+        )}
+      </Button>
+    </div>
   )
 }
