@@ -16,6 +16,7 @@ frontend:
         - echo "AI_API_KEY=$AI_API_KEY" >> .env.production
         - echo "WP_ENCRYPTION_KEY=$WP_ENCRYPTION_KEY" >> .env.production
         - echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN" >> .env.production
+        - echo "LANDING_DOMAINS=$LANDING_DOMAINS" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next

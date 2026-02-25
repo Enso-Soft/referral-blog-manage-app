@@ -7,6 +7,16 @@ const CORS_HEADERS = {
   'Access-Control-Max-Age': '86400',
 }
 
+// 환경변수에서 랜딩 도메인 목록 파싱 (쉼표 구분)
+// ex) LANDING_DOMAINS=ensoft.me,enso-soft.xyz,ensoft.xyz
+const LANDING_HOSTS = new Set(
+  (process.env.LANDING_DOMAINS ?? '')
+    .split(',')
+    .map(d => d.trim())
+    .filter(Boolean)
+    .flatMap(d => [d, `www.${d}`])
+)
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -33,11 +43,8 @@ export function middleware(request: NextRequest) {
   // 도메인 기반 라우팅
   const host = request.headers.get('host') ?? ''
 
-  // 루트 도메인 → 랜딩 페이지로 rewrite
-  const isLandingHost =
-    host === 'ensoft.me' || host === 'www.ensoft.me' ||
-    host === 'enso-soft.xyz' || host === 'www.enso-soft.xyz'
-  if (isLandingHost) {
+  // 랜딩 도메인에 해당하면 → 랜딩 페이지로 rewrite
+  if (LANDING_HOSTS.has(host)) {
     const url = request.nextUrl.clone()
     url.pathname = `/landing${pathname === '/' ? '' : pathname}`
     return NextResponse.rewrite(url)
