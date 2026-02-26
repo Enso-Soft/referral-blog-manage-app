@@ -76,6 +76,49 @@ export async function createCheckoutSession(
   return checkoutUrl
 }
 
+export interface VerifiedOrder {
+  valid: boolean
+  status?: string
+  refunded?: boolean
+  total?: number
+  userEmail?: string
+}
+
+/**
+ * Lemon Squeezy API로 주문 검증 (실존 + store_id + 상태)
+ */
+export async function verifyOrder(orderId: string): Promise<VerifiedOrder> {
+  try {
+    const apiKey = getApiKey()
+    const storeId = getStoreId()
+
+    const response = await fetch(`${LEMON_SQUEEZY_API_URL}/orders/${orderId}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/vnd.api+json',
+      },
+    })
+
+    if (!response.ok) return { valid: false }
+
+    const result = await response.json()
+    const attrs = result.data?.attributes
+    const orderStoreId = String(attrs?.store_id)
+
+    if (orderStoreId !== storeId) return { valid: false }
+
+    return {
+      valid: true,
+      status: attrs?.status,
+      refunded: attrs?.refunded ?? false,
+      total: attrs?.total,
+      userEmail: attrs?.user_email,
+    }
+  } catch {
+    return { valid: false }
+  }
+}
+
 /**
  * Lemon Squeezy 웹훅 시그니처 검증 (HMAC-SHA256)
  */

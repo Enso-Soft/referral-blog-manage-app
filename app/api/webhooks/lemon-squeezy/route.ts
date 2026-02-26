@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { logger } from '@/lib/logger'
 import { grantCredits, adminDeductCredits } from '@/lib/credit-operations'
-import { verifyWebhookSignature } from '@/lib/lemon-squeezy'
+import { verifyWebhookSignature, verifyOrder } from '@/lib/lemon-squeezy'
 
 // POST: Lemon Squeezy 웹훅 (결제 확인 → E'Credit 충전)
 export async function POST(request: NextRequest) {
@@ -54,8 +54,19 @@ export async function POST(request: NextRequest) {
     }
 
     const customData = payload.meta?.custom_data || {}
-    const userId = customData.user_id
-    const creditAmount = Number(customData.credit_amount) || 0
+    let userId = customData.user_id
+    let creditAmount = Number(customData.credit_amount) || 0
+
+    // 환불 시 custom_data 없으면 원래 주문 기록에서 조회 (대시보드 수동 환불 대응)
+    if ((!userId || creditAmount <= 0) && eventName === 'order_refunded') {
+      const originalEventRef = db.collection('lemon_squeezy_events').doc(`order_created_${rawEventId}`)
+      const originalEvent = await originalEventRef.get()
+      if (originalEvent.exists) {
+        const originalData = originalEvent.data()!
+        userId = userId || originalData.userId
+        creditAmount = creditAmount || originalData.creditAmount
+      }
+    }
 
     if (!userId || creditAmount <= 0) {
       logger.error('[Webhook] userId 또는 creditAmount 누락', { userId, creditAmount })
@@ -67,6 +78,42 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json(
         { success: false, error: '필수 데이터 누락' },
+        { status: 400 }
+      )
+    }
+
+    // Lemon Squeezy API로 주문 검증 (실존 + store_id + 상태 크로스체크)
+    const rawOrderId = payload.data?.id
+    const order = await verifyOrder(String(rawOrderId || ''))
+    if (!rawOrderId || !order.valid) {
+      logger.warn('[Webhook] 주문 검증 실패 - Lemon Squeezy에 존재하지 않는 주문', { orderId: rawOrderId })
+      await eventRef.set({
+        eventName,
+        userId,
+        creditAmount,
+        payload: payload.data,
+        processedAt: Timestamp.now(),
+        error: '주문 검증 실패',
+      })
+      return NextResponse.json(
+        { success: false, error: '주문 검증 실패' },
+        { status: 403 }
+      )
+    }
+
+    // 상태 크로스체크: 충전 요청인데 이미 환불된 주문이면 차단
+    if (eventName === 'order_created' && order.refunded) {
+      logger.warn('[Webhook] 이미 환불된 주문에 대한 충전 요청 차단', { orderId: rawOrderId })
+      await eventRef.set({
+        eventName,
+        userId,
+        creditAmount,
+        payload: payload.data,
+        processedAt: Timestamp.now(),
+        error: '이미 환불된 주문',
+      })
+      return NextResponse.json(
+        { success: false, error: '이미 환불된 주문' },
         { status: 400 }
       )
     }
