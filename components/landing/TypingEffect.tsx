@@ -21,6 +21,12 @@ export function TypingEffect({
   const [displayed, setDisplayed] = useState('')
   const completedRef = useRef(false)
 
+  const prevTextRef = useRef(text)
+  if (prevTextRef.current !== text) {
+    prevTextRef.current = text
+    completedRef.current = false
+  }
+
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { motion, useScroll, useTransform } from 'framer-motion'
 import { Zap, Gift } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
@@ -8,28 +8,39 @@ import { ScrollReveal } from './ScrollReveal'
 import { CounterAnimation } from './CounterAnimation'
 import type { CreditConfig } from './LandingPage'
 
-const STUDIO_URL = 'https://studio.ensoft.me'
-
 const ENSO_SOFT_CHARS = ['E', 'n', 's', 'o', ' ', 'S', 'o', 'f', 't']
 
 export function PricingSection({ creditConfig }: { creditConfig: CreditConfig }) {
   const { t } = useLanguage()
   const sectionRef = useRef<HTMLElement>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640)
+    check()
+    window.addEventListener('resize', check, { passive: true })
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ['start 0.5', 'end start'],
   })
 
+  // 모바일에서는 좌우 이동 없이 fade-out만, 데스크톱에서는 원래 애니메이션
+  const flyDist = isMobile ? 60 : 200
+  const flyY = isMobile ? 40 : 120
+
   // E (index 0) flies to the left card
-  const eX = useTransform(scrollYProgress, [0.05, 0.25], [0, -200])
-  const eY = useTransform(scrollYProgress, [0.05, 0.25], [0, 120])
-  const eScale = useTransform(scrollYProgress, [0.05, 0.25], [1, 1.5])
+  const eX = useTransform(scrollYProgress, [0.05, 0.25], [0, -flyDist])
+  const eY = useTransform(scrollYProgress, [0.05, 0.25], [0, flyY])
+  const eScale = useTransform(scrollYProgress, [0.05, 0.25], [1, isMobile ? 1.1 : 1.5])
   const eOpacity = useTransform(scrollYProgress, [0.2, 0.3], [1, 0])
 
   // S (index 5) flies to the right card
-  const sX = useTransform(scrollYProgress, [0.05, 0.25], [0, 200])
-  const sY = useTransform(scrollYProgress, [0.05, 0.25], [0, 120])
-  const sScale = useTransform(scrollYProgress, [0.05, 0.25], [1, 1.5])
+  const sX = useTransform(scrollYProgress, [0.05, 0.25], [0, flyDist])
+  const sY = useTransform(scrollYProgress, [0.05, 0.25], [0, flyY])
+  const sScale = useTransform(scrollYProgress, [0.05, 0.25], [1, isMobile ? 1.1 : 1.5])
   const sOpacity = useTransform(scrollYProgress, [0.2, 0.3], [1, 0])
 
   // Other chars fade out
@@ -42,7 +53,7 @@ export function PricingSection({ creditConfig }: { creditConfig: CreditConfig })
   return (
     <section
       ref={sectionRef}
-      className="relative py-24 sm:py-32 px-4 sm:px-6 lg:px-8"
+      className="relative py-24 sm:py-32 px-4 sm:px-6 lg:px-8 overflow-hidden"
     >
       <div className="max-w-5xl mx-auto">
         {/* Section header */}

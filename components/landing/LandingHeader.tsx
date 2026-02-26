@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Moon, Sun, Globe } from 'lucide-react'
+import { Moon, Sun, Monitor, Globe } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useLanguage } from './LanguageProvider'
 
@@ -49,13 +49,19 @@ export function LandingHeader() {
             <span>{lang === 'ko' ? 'EN' : 'KO'}</span>
           </button>
 
-          {/* Theme toggle */}
+          {/* Theme toggle: light → dark → system */}
           {mounted && (
             <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              onClick={() => {
+                if (theme === 'light') setTheme('dark')
+                else if (theme === 'dark') setTheme('system')
+                else setTheme('light')
+              }}
               className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
             >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {theme === 'light' && <Sun className="w-4 h-4" />}
+              {theme === 'dark' && <Moon className="w-4 h-4" />}
+              {theme === 'system' && <Monitor className="w-4 h-4" />}
             </button>
           )}
 
