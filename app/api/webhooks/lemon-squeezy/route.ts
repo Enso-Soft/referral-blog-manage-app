@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { logger } from '@/lib/logger'
-import { grantCredits } from '@/lib/credit-operations'
+import { grantCredits, adminDeductCredits } from '@/lib/credit-operations'
 import { verifyWebhookSignature } from '@/lib/lemon-squeezy'
 
 // POST: Lemon Squeezy 웹훅 (결제 확인 → E'Credit 충전)
@@ -22,7 +22,9 @@ export async function POST(request: NextRequest) {
 
     const payload = JSON.parse(rawBody)
     const eventName = payload.meta?.event_name
-    const eventId = payload.meta?.custom_data?.event_id || payload.data?.id
+    // 이벤트 타입별로 고유 키 생성 (order_created와 order_refunded가 같은 orderId를 공유하므로)
+    const rawEventId = payload.meta?.custom_data?.event_id || payload.data?.id
+    const eventId = rawEventId ? `${eventName}_${rawEventId}` : null
 
     if (!eventId) {
       return NextResponse.json(
@@ -40,9 +42,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '이미 처리된 이벤트입니다' })
     }
 
-    // order_created 이벤트만 처리
-    if (eventName !== 'order_created') {
-      // 이벤트 기록만 하고 스킵
+    // order_created / order_refunded 이벤트만 처리
+    if (eventName !== 'order_created' && eventName !== 'order_refunded') {
       await eventRef.set({
         eventName,
         payload: payload.data,
@@ -88,28 +89,72 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // E'Credit 충전
-    const result = await grantCredits(
-      userId,
-      0,
-      creditAmount,
-      'credit',
-      `${creditAmount.toLocaleString()} E'Credit 충전`,
-      String(eventId),
-      'lemon_squeezy_order'
-    )
+    if (eventName === 'order_created') {
+      // E'Credit 충전
+      const result = await grantCredits(
+        userId,
+        0,
+        creditAmount,
+        'credit',
+        `${creditAmount.toLocaleString()} E'Credit 충전`,
+        String(eventId),
+        'lemon_squeezy_order'
+      )
 
-    // 이벤트 기록
-    await eventRef.set({
-      eventName,
-      userId,
-      creditAmount,
-      transactionId: result.transactionId,
-      payload: payload.data,
-      processedAt: Timestamp.now(),
-    })
+      await eventRef.set({
+        eventName,
+        userId,
+        creditAmount,
+        transactionId: result.transactionId,
+        payload: payload.data,
+        processedAt: Timestamp.now(),
+      })
 
-    logger.info(`[Webhook] E'Credit ${creditAmount} 충전 완료 (userId: ${userId})`)
+      logger.info(`[Webhook] E'Credit ${creditAmount} 충전 완료 (userId: ${userId})`)
+    } else if (eventName === 'order_refunded') {
+      // 환불: E'Credit 차감 (잔액 부족 시 가능한 만큼만)
+      const userData = userDoc.data()!
+      const eCredit = userData.eCredit ?? 0
+      const deductAmount = Math.min(creditAmount, eCredit)
+
+      if (deductAmount > 0) {
+        // adminDeductCredits로 E'Credit만 정확히 차감 (S'Credit 보호)
+        const result = await adminDeductCredits(
+          userId,
+          0,
+          deductAmount,
+          `${creditAmount.toLocaleString()} E'Credit 환불 차감`,
+          'system_webhook'
+        )
+
+        await eventRef.set({
+          eventName,
+          userId,
+          creditAmount,
+          deductedAmount: deductAmount,
+          shortfall: creditAmount - deductAmount,
+          transactionId: result.transactionId,
+          payload: payload.data,
+          processedAt: Timestamp.now(),
+        })
+
+        logger.info(`[Webhook] E'Credit ${deductAmount} 환불 차감 완료 (userId: ${userId})`)
+      } else {
+        // 잔액 0: 차감 불가, 기록만
+        await eventRef.set({
+          eventName,
+          userId,
+          creditAmount,
+          deductedAmount: 0,
+          shortfall: creditAmount,
+          payload: payload.data,
+          processedAt: Timestamp.now(),
+          error: '잔액 부족으로 차감 불가',
+        })
+
+        logger.warn(`[Webhook] 환불 차감 실패 - 잔액 부족 (userId: ${userId}, 요청: ${creditAmount}, 잔액: 0)`)
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

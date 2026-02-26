@@ -1,5 +1,5 @@
 import 'server-only'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 
 const LEMON_SQUEEZY_API_URL = 'https://api.lemonsqueezy.com/v1'
 
@@ -84,10 +84,13 @@ export function verifyWebhookSignature(
   signature: string
 ): boolean {
   try {
+    if (!signature || !rawBody) return false
     const secret = getWebhookSecret()
     const hmac = createHmac('sha256', secret)
-    const digest = hmac.update(rawBody).digest('hex')
-    return digest === signature
+    const digest = Buffer.from(hmac.update(rawBody).digest('hex'), 'hex')
+    const sig = Buffer.from(signature, 'hex')
+    if (digest.length !== sig.length) return false
+    return timingSafeEqual(digest, sig)
   } catch {
     return false
   }
