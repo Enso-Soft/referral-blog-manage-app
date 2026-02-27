@@ -88,7 +88,12 @@ export interface VerifiedOrder {
   valid: boolean
   status?: string
   refunded?: boolean
+  /** 세금 포함 총액 (센트 단위) */
   total?: number
+  /** 세전 금액 (센트 단위) */
+  subtotal?: number
+  /** 세금 (센트 단위) */
+  tax?: number
   userEmail?: string
 }
 
@@ -120,6 +125,8 @@ export async function verifyOrder(orderId: string): Promise<VerifiedOrder> {
       status: attrs?.status,
       refunded: attrs?.refunded ?? false,
       total: attrs?.total,
+      subtotal: attrs?.subtotal,
+      tax: attrs?.tax,
       userEmail: attrs?.user_email,
     }
   } catch {

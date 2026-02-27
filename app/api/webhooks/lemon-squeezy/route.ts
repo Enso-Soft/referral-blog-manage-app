@@ -114,11 +114,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 서버에서 크레딧 계산: order.total(원 단위) × creditPerWon
-    // Lemon Squeezy total은 KRW의 경우 센트 없이 원 단위 정수 (예: 10000 = 10,000원)
-    const orderTotal = order.total || 0
+    // 서버에서 크레딧 계산: subtotal(센트 단위, 세전) → 원 변환 → × creditPerWon
+    // Lemon Squeezy는 모든 통화를 센트 단위로 반환 (₩2,500 → 250000)
+    const subtotalCents = order.subtotal || order.total || 0
+    const orderTotal = Math.round(subtotalCents / 100)
     const creditSettings = await getCreditSettings()
     const creditAmount = orderTotal * creditSettings.creditPerWon
+
+    logger.info('[Webhook] 크레딧 계산', {
+      rawSubtotal: order.subtotal,
+      rawTotal: order.total,
+      rawTax: order.tax,
+      orderTotal,
+      creditPerWon: creditSettings.creditPerWon,
+      creditAmount,
+    })
 
     if (creditAmount <= 0) {
       logger.error('[Webhook] 크레딧 계산 결과 0 이하', { orderTotal, creditPerWon: creditSettings.creditPerWon })
