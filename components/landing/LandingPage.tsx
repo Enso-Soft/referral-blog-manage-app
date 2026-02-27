@@ -11,11 +11,13 @@ import { FooterSection } from './FooterSection'
 export interface CreditConfig {
   signupGrantAmount: number
   checkinGrantAmount: number
+  creditPerWon: number
 }
 
 const DEFAULT_CONFIG: CreditConfig = {
   signupGrantAmount: 10000,
   checkinGrantAmount: 1000,
+  creditPerWon: 5,
 }
 
 export function LandingPage() {

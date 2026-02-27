@@ -14,6 +14,7 @@ const FIELD_LABELS: { key: keyof CreditSettings; label: string; desc: string }[]
   { key: 'aiWritePreChargeAmount', label: 'AI 작성 선결제', desc: 'AI 글 작성 요청 시 선결제 금액' },
   { key: 'aiChatPerMessageCost', label: 'AI 채팅 메시지당', desc: 'AI 채팅 메시지 1건당 비용' },
   { key: 'wpPublishCost', label: 'WP 발행 비용', desc: 'WordPress 발행 1건당 비용' },
+  { key: 'creditPerWon', label: "E'Credit 환율 (원)", desc: '1원당 지급되는 E\'Credit 수' },
 ]
 
 export function CreditSettingsTab() {

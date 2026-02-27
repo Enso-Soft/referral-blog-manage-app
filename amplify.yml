@@ -17,6 +17,10 @@ frontend:
         - echo "WP_ENCRYPTION_KEY=$WP_ENCRYPTION_KEY" >> .env.production
         - echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN" >> .env.production
         - echo "LANDING_DOMAINS=$LANDING_DOMAINS" >> .env.production
+        - echo "LEMON_SQUEEZY_API_KEY=$LEMON_SQUEEZY_API_KEY" >> .env.production
+        - echo "LEMON_SQUEEZY_WEBHOOK_SECRET=$LEMON_SQUEEZY_WEBHOOK_SECRET" >> .env.production
+        - echo "LEMON_SQUEEZY_STORE_ID=$LEMON_SQUEEZY_STORE_ID" >> .env.production
+        - echo "LEMON_SQUEEZY_VARIANT_ID=$LEMON_SQUEEZY_VARIANT_ID" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next

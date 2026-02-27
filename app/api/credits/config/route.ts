@@ -15,6 +15,7 @@ export async function GET() {
       data: {
         signupGrantAmount: settings.signupGrantAmount,
         checkinGrantAmount: settings.checkinGrantAmount,
+        creditPerWon: settings.creditPerWon,
       },
     })
   } catch (error) {

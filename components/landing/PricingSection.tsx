@@ -125,7 +125,9 @@ export function PricingSection({ creditConfig }: { creditConfig: CreditConfig })
               <p className="text-white/80 mb-6">{t('pricing.ecredit.desc')}</p>
 
               <div className="bg-white/15 rounded-2xl p-4">
-                <div className="text-2xl font-bold">{t('pricing.ecredit.price')}</div>
+                <div className="text-2xl font-bold">
+                  ₩1,000 = {(1000 * creditConfig.creditPerWon).toLocaleString()} E&apos;Credit
+                </div>
               </div>
             </div>
           </div>

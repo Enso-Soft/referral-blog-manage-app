@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { logger } from '@/lib/logger'
-import { grantCredits, adminDeductCredits } from '@/lib/credit-operations'
+import { grantCredits, adminDeductCredits, getCreditSettings } from '@/lib/credit-operations'
 import { verifyWebhookSignature, verifyOrder } from '@/lib/lemon-squeezy'
 
 // POST: Lemon Squeezy 웹훅 (결제 확인 → E'Credit 충전)
@@ -55,26 +55,24 @@ export async function POST(request: NextRequest) {
 
     const customData = payload.meta?.custom_data || {}
     let userId = customData.user_id
-    let creditAmount = Number(customData.credit_amount) || 0
 
-    // 환불 시 custom_data 없으면 원래 주문 기록에서 조회 (대시보드 수동 환불 대응)
-    if ((!userId || creditAmount <= 0) && eventName === 'order_refunded') {
+    // 환불 시 custom_data 없으면 원래 주문 기록에서 userId 조회 (대시보드 수동 환불 대응)
+    if (!userId && eventName === 'order_refunded') {
       const originalEventRef = db.collection('lemon_squeezy_events').doc(`order_created_${rawEventId}`)
       const originalEvent = await originalEventRef.get()
       if (originalEvent.exists) {
         const originalData = originalEvent.data()!
-        userId = userId || originalData.userId
-        creditAmount = creditAmount || originalData.creditAmount
+        userId = originalData.userId
       }
     }
 
-    if (!userId || creditAmount <= 0) {
-      logger.error('[Webhook] userId 또는 creditAmount 누락', { userId, creditAmount })
+    if (!userId) {
+      logger.error('[Webhook] userId 누락', { userId })
       await eventRef.set({
         eventName,
         payload: payload.data,
         processedAt: Timestamp.now(),
-        error: 'userId 또는 creditAmount 누락',
+        error: 'userId 누락',
       })
       return NextResponse.json(
         { success: false, error: '필수 데이터 누락' },
@@ -90,7 +88,6 @@ export async function POST(request: NextRequest) {
       await eventRef.set({
         eventName,
         userId,
-        creditAmount,
         payload: payload.data,
         processedAt: Timestamp.now(),
         error: '주문 검증 실패',
@@ -107,13 +104,36 @@ export async function POST(request: NextRequest) {
       await eventRef.set({
         eventName,
         userId,
-        creditAmount,
         payload: payload.data,
         processedAt: Timestamp.now(),
         error: '이미 환불된 주문',
       })
       return NextResponse.json(
         { success: false, error: '이미 환불된 주문' },
+        { status: 400 }
+      )
+    }
+
+    // 서버에서 크레딧 계산: order.total(원 단위) × creditPerWon
+    // Lemon Squeezy total은 KRW의 경우 센트 없이 원 단위 정수 (예: 10000 = 10,000원)
+    const orderTotal = order.total || 0
+    const creditSettings = await getCreditSettings()
+    const creditAmount = orderTotal * creditSettings.creditPerWon
+
+    if (creditAmount <= 0) {
+      logger.error('[Webhook] 크레딧 계산 결과 0 이하', { orderTotal, creditPerWon: creditSettings.creditPerWon })
+      await eventRef.set({
+        eventName,
+        userId,
+        orderTotal,
+        creditPerWon: creditSettings.creditPerWon,
+        creditAmount,
+        payload: payload.data,
+        processedAt: Timestamp.now(),
+        error: '크레딧 계산 결과 0 이하',
+      })
+      return NextResponse.json(
+        { success: false, error: '유효하지 않은 결제 금액' },
         { status: 400 }
       )
     }
@@ -151,6 +171,8 @@ export async function POST(request: NextRequest) {
       await eventRef.set({
         eventName,
         userId,
+        orderTotal,
+        creditPerWon: creditSettings.creditPerWon,
         creditAmount,
         transactionId: result.transactionId,
         payload: payload.data,
@@ -177,6 +199,8 @@ export async function POST(request: NextRequest) {
         await eventRef.set({
           eventName,
           userId,
+          orderTotal,
+          creditPerWon: creditSettings.creditPerWon,
           creditAmount,
           deductedAmount: deductAmount,
           shortfall: creditAmount - deductAmount,
@@ -191,6 +215,8 @@ export async function POST(request: NextRequest) {
         await eventRef.set({
           eventName,
           userId,
+          orderTotal,
+          creditPerWon: creditSettings.creditPerWon,
           creditAmount,
           deductedAmount: 0,
           shortfall: creditAmount,

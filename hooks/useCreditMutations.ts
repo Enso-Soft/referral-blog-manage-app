@@ -28,11 +28,9 @@ export function useCreditMutations() {
 
   // 구매 (Lemon Squeezy checkout URL 생성)
   const purchase = useMutation({
-    mutationFn: async (variantId: string) => {
+    mutationFn: async () => {
       const res = await authFetch('/api/credits/purchase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ variantId }),
       })
       const json = await res.json()
       if (!res.ok) {

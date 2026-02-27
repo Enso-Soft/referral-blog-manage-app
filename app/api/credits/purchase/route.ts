@@ -9,17 +9,16 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthFromRequest(request)
     requireAuth(auth)
 
-    const body = await request.json()
-    const { variantId } = body
-
+    const variantId = process.env.LEMON_SQUEEZY_VARIANT_ID
     if (!variantId) {
       return NextResponse.json(
-        { success: false, error: 'variantId는 필수입니다' },
-        { status: 400 }
+        { success: false, error: '결제 설정이 완료되지 않았습니다' },
+        { status: 500 }
       )
     }
 
-    const checkoutUrl = await createCheckoutSession(auth.userId, variantId)
+    const origin = request.headers.get('origin') || request.nextUrl.origin
+    const checkoutUrl = await createCheckoutSession(auth.userId, variantId, origin)
 
     return NextResponse.json({
       success: true,

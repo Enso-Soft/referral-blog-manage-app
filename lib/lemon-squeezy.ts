@@ -1,5 +1,6 @@
 import 'server-only'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { getCreditSettings } from '@/lib/credit-operations'
 
 const LEMON_SQUEEZY_API_URL = 'https://api.lemonsqueezy.com/v1'
 
@@ -27,10 +28,13 @@ function getStoreId(): string {
  */
 export async function createCheckoutSession(
   userId: string,
-  variantId: string
+  variantId: string,
+  origin: string
 ): Promise<string> {
   const apiKey = getApiKey()
   const storeId = getStoreId()
+  const creditSettings = await getCreditSettings()
+  const rate = creditSettings.creditPerWon
 
   const response = await fetch(`${LEMON_SQUEEZY_API_URL}/checkouts`, {
     method: 'POST',
@@ -43,6 +47,10 @@ export async function createCheckoutSession(
       data: {
         type: 'checkouts',
         attributes: {
+          product_options: {
+            redirect_url: `${origin}/credits`,
+            description: `₩1,000 = ${(1000 * rate).toLocaleString()} E'Credit`,
+          },
           checkout_data: {
             custom: {
               user_id: userId,
