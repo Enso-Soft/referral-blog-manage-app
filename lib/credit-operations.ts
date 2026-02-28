@@ -1,7 +1,9 @@
 import 'server-only'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
+import { TTLCache } from '@/lib/cache'
 import { logger } from '@/lib/logger'
+import { AppError } from '@/lib/errors'
 import {
   type CreditTransactionType,
   type CreditSettings,
@@ -9,31 +11,29 @@ import {
 } from '@/lib/schemas/credit'
 
 // 크레딧 설정 캐시 (5분)
-let settingsCache: { data: CreditSettings; expiresAt: number } | null = null
+const settingsCache = new TTLCache<CreditSettings>(5 * 60 * 1000, 10)
 
 /**
  * 관리자 크레딧 설정 조회 (5분 캐시)
  */
 export async function getCreditSettings(): Promise<CreditSettings> {
-  const now = Date.now()
-  if (settingsCache && settingsCache.expiresAt > now) {
-    return settingsCache.data
-  }
+  const cached = settingsCache.get('credit_config')
+  if (cached) return cached
 
   const db = getDb()
   const doc = await db.collection('app_settings').doc('credit_config').get()
 
-  const data = doc.exists
+  const data = (doc.exists
     ? { ...DEFAULT_CREDIT_SETTINGS, ...doc.data() }
-    : DEFAULT_CREDIT_SETTINGS
+    : DEFAULT_CREDIT_SETTINGS) as CreditSettings
 
-  settingsCache = { data: data as CreditSettings, expiresAt: now + 5 * 60 * 1000 }
-  return settingsCache.data
+  settingsCache.set('credit_config', data)
+  return data
 }
 
 /** 설정 캐시 무효화 */
 export function invalidateCreditSettingsCache() {
-  settingsCache = null
+  settingsCache.delete('credit_config')
 }
 
 interface DeductResult {
@@ -77,10 +77,7 @@ export async function deductCredits(
     const totalCredit = sCredit + eCredit
 
     if (totalCredit < amount) {
-      const err = new Error('크레딧이 부족합니다')
-      ;(err as any).statusCode = 402
-      ;(err as any).code = 'INSUFFICIENT_CREDIT'
-      throw err
+      throw new AppError('크레딧이 부족합니다', 'INSUFFICIENT_CREDIT', 402)
     }
 
     const sCreditUsed = Math.min(sCredit, amount)
@@ -160,16 +157,10 @@ export async function adminDeductCredits(
     const eCredit = userData.eCredit ?? 0
 
     if (sDeduct > 0 && sCredit < sDeduct) {
-      const err = new Error(`S'Credit이 부족합니다 (보유: ${sCredit}, 차감: ${sDeduct})`)
-      ;(err as any).statusCode = 402
-      ;(err as any).code = 'INSUFFICIENT_CREDIT'
-      throw err
+      throw new AppError(`S'Credit이 부족합니다 (보유: ${sCredit}, 차감: ${sDeduct})`, 'INSUFFICIENT_CREDIT', 402)
     }
     if (eDeduct > 0 && eCredit < eDeduct) {
-      const err = new Error(`E'Credit이 부족합니다 (보유: ${eCredit}, 차감: ${eDeduct})`)
-      ;(err as any).statusCode = 402
-      ;(err as any).code = 'INSUFFICIENT_CREDIT'
-      throw err
+      throw new AppError(`E'Credit이 부족합니다 (보유: ${eCredit}, 차감: ${eDeduct})`, 'INSUFFICIENT_CREDIT', 402)
     }
 
     const newSCredit = sCredit - sDeduct
@@ -445,8 +436,8 @@ export async function settleAIRequest(
           settlementTransactionId: result.transactionId,
         },
       })
-    } catch (err: any) {
-      if (err.code === 'INSUFFICIENT_CREDIT') {
+    } catch (err: unknown) {
+      if (err instanceof AppError && err.code === 'INSUFFICIENT_CREDIT') {
         // 잔액 부족 시 가능한 만큼만 차감
         const userRef = db.collection('users').doc(userId)
         const userDoc = await userRef.get()

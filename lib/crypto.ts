@@ -1,5 +1,5 @@
 import 'server-only'
-import { randomBytes, createCipheriv, createDecipheriv } from 'crypto'
+import { randomBytes, createCipheriv, createDecipheriv, createHash } from 'crypto'
 
 const ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 12
@@ -53,4 +53,12 @@ export function decrypt(value: string): string {
 
 export function isEncrypted(value: string): boolean {
   return value.startsWith(PREFIX)
+}
+
+/**
+ * API Key를 SHA-256 해시로 변환
+ * Firestore에 해시만 저장하여 평문 노출 방지
+ */
+export function hashApiKey(key: string): string {
+  return createHash('sha256').update(key).digest('hex')
 }

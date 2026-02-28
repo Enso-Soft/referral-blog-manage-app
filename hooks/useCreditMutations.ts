@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
-import { useAuth } from '@/components/layout/AuthProvider'
+import { useCredit } from '@/context/CreditContext'
 import { queryKeys } from '@/lib/query-client'
 
 export function useCreditMutations() {
   const { authFetch } = useAuthFetch()
-  const { refreshCredits } = useAuth()
+  const { refreshCredits } = useCredit()
   const queryClient = useQueryClient()
 
   const invalidateCredits = () => {

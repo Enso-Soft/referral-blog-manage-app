@@ -1,6 +1,6 @@
 import { extractImagesFromContent } from '@/lib/url-utils'
 import { toDate } from '@/lib/utils'
-import type { WPSitePublishData, WPPublishHistoryEntry } from '@/lib/schemas'
+import type { WPSitePublishData, WPPublishHistoryEntry, WordPressContent } from '@/lib/schemas'
 import type { FirestoreUserData } from '@/lib/schemas/user'
 
 // --- WordPress 멀티사이트 데이터 정규화 ---
@@ -16,7 +16,7 @@ export interface NormalizedWordPressData {
  * - wpPostId만 있으면 sites[wpSiteId || '__legacy__']로 변환
  * - 둘 다 없으면 빈 객체 반환
  */
-export function normalizeWordPressData(wp: Record<string, unknown> | undefined | null): NormalizedWordPressData {
+export function normalizeWordPressData(wp: WordPressContent | Record<string, unknown> | undefined | null): NormalizedWordPressData {
   if (!wp) return { sites: {}, publishHistory: [] }
 
   const publishHistory = (wp.publishHistory || []) as WPPublishHistoryEntry[]

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import DOMPurify from 'dompurify'
+import { sanitizeHtml } from '@/lib/sanitize'
 import { Eye, Code, AlertTriangle, Save, Loader2, Columns } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DisclaimerButtons } from './DisclaimerButtons'
@@ -151,10 +151,7 @@ export function PostEditor({ initialContent, onSave }: PostEditorProps) {
   }, [isMobile, mode])
 
   // 미리보기용 HTML (data-source-line 속성 포함 + XSS sanitize)
-  const previewContent = useMemo(() => DOMPurify.sanitize(addLineAttributes(content), {
-    ADD_ATTR: ['data-source-line', 'target', 'rel', 'style'],
-    ADD_TAGS: ['iframe'],
-  }), [content])
+  const previewContent = useMemo(() => sanitizeHtml(addLineAttributes(content), ['data-source-line']), [content])
 
   // 디바운스된 스크롤 함수 (150ms)
   const debouncedScrollToElement = useMemo(

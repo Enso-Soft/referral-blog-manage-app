@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/layout/AuthProvider'
+import { useCredit } from '@/context/CreditContext'
 import { useCreditMutations } from '@/hooks/useCreditMutations'
 import { CreditBalanceCard } from '@/components/credit/CreditBalanceCard'
 import { CreditTransactionList } from '@/components/credit/CreditTransactionList'
@@ -11,7 +12,8 @@ import { Button } from '@/components/ui/button'
 
 export default function CreditsPage() {
   const router = useRouter()
-  const { user, loading, sCredit, eCredit } = useAuth()
+  const { user, loading } = useAuth()
+  const { sCredit, eCredit } = useCredit()
   const { purchase } = useCreditMutations()
   const [typeFilter, setTypeFilter] = useState('')
   const [creditPerWon, setCreditPerWon] = useState(5)

@@ -83,6 +83,8 @@ export function FloatingActionMenu({ onOpenPanel, hasThreads }: FloatingActionMe
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
+        aria-label={isOpen ? '액션 메뉴 닫기' : '액션 메뉴 열기'}
+        aria-expanded={isOpen}
         className="w-14 h-14 rounded-full bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 text-white shadow-xl hover:shadow-2xl flex items-center justify-center transition-shadow"
       >
         <motion.div

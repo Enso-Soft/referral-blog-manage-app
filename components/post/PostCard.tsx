@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, memo } from 'react'
+import { useState, useMemo, memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { FileText, Tag, Send, Loader2, Calendar, RotateCcw } from 'lucide-react'
@@ -18,25 +18,11 @@ interface PostCardProps {
 }
 
 export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeChange, viewMode = 'grid' }: PostCardProps) {
-  const [status, setStatus] = useState(post.status)
-  const [type, setType] = useState<'general' | 'affiliate'>(post.postType || 'general')
+  const status = post.status
+  const type = post.postType || 'general'
   const [isStatusChanging, setIsStatusChanging] = useState(false)
   const [isTypeChanging, setIsTypeChanging] = useState(false)
   const [imageError, setImageError] = useState(false)
-
-  // Sync state with props when data changes externally (real-time)
-  useEffect(() => {
-    setStatus(post.status)
-  }, [post.status])
-
-  useEffect(() => {
-    setType(post.postType || 'general')
-  }, [post.postType])
-
-  // Reset image error when thumbnail changes
-  useEffect(() => {
-    setImageError(false)
-  }, [post.content])
 
   // content에서 첫 번째 이미지 추출 (useMemo로 캐싱)
   const thumbnail = useMemo(
@@ -45,8 +31,8 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
   )
 
   // WordPress data for PublishedBadge
-  const wordpressData = (post as unknown as { wordpress?: Record<string, unknown> }).wordpress
-  const publishedUrls = (post as unknown as { publishedUrls?: string[] }).publishedUrls
+  const wordpressData = post.wordpress
+  const publishedUrls = post.publishedUrls
 
   const handleStatusToggle = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -58,10 +44,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
     setIsStatusChanging(true)
 
     try {
-      const success = await onStatusChange(post.id, newStatus)
-      if (success) {
-        setStatus(newStatus)
-      }
+      await onStatusChange(post.id, newStatus)
     } finally {
       setIsStatusChanging(false)
     }
@@ -77,10 +60,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
     setIsTypeChanging(true)
 
     try {
-      const success = await onTypeChange(post.id, newType)
-      if (success) {
-        setType(newType)
-      }
+      await onTypeChange(post.id, newType)
     } finally {
       setIsTypeChanging(false)
     }

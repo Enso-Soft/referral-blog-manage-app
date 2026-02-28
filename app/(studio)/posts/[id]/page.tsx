@@ -3,19 +3,20 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
-import JSZip from 'jszip'
 import { PostViewer } from '@/components/post/PostViewer'
 import { CopyButton, RichCopyButton } from '@/components/post/CopyButton'
 import { AuthGuard } from '@/components/layout/AuthGuard'
-import { Snackbar } from '@/components/common/Snackbar'
-import { AIChatContent } from '@/components/ai/AIChatModal'
+import { notify } from '@/lib/toast'
 import { DisclaimerButtons } from '@/components/post/DisclaimerButtons'
-import { SeoAnalysisView } from '@/components/seo/SeoAnalysisView'
-import { ThreadsSection } from '@/components/threads/ThreadsSection'
 import { FloatingActionMenu, type PanelType } from '@/components/common/FloatingActionMenu'
 import { SlidePanel } from '@/components/common/SlidePanel'
-import { WordPressPanel } from '@/components/wordpress/WordPressPanel'
+
+const WordPressPanel = dynamic(() => import('@/components/wordpress/WordPressPanel').then(m => ({ default: m.WordPressPanel })))
+const AIChatContent = dynamic(() => import('@/components/ai/AIChatModal').then(m => ({ default: m.AIChatContent })))
+const ThreadsSection = dynamic(() => import('@/components/threads/ThreadsSection').then(m => ({ default: m.ThreadsSection })))
+const SeoAnalysisView = dynamic(() => import('@/components/seo/SeoAnalysisView').then(m => ({ default: m.SeoAnalysisView })))
 import { PublishedBadge } from '@/components/post/PublishedBadge'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { usePost } from '@/hooks/usePost'
@@ -27,7 +28,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input'
 import { isValidUrl, getFaviconUrl, extractImagesFromContent } from '@/lib/url-utils'
 import { normalizeWordPressData } from '@/lib/wordpress-api'
-import type { SeoAnalysis, ThreadsContent } from '@/lib/schemas'
 import {
   ArrowLeft,
   Edit,
@@ -62,8 +62,6 @@ function PostDetail() {
   const [imagesOpen, setImagesOpen] = useState(false)
   const [zipping, setZipping] = useState(false)
   const [statusChanging, setStatusChanging] = useState(false)
-  const [snackbarMessage, setSnackbarMessage] = useState('')
-  const [snackbarVisible, setSnackbarVisible] = useState(false)
   const [manualUrls, setManualUrls] = useState<string[]>([])
   const [editingUrlIndex, setEditingUrlIndex] = useState<number | null>(null)
   const [editingUrlValue, setEditingUrlValue] = useState('')
@@ -106,16 +104,14 @@ function PostDetail() {
   // 저장 완료 후 스낵바 표시
   useEffect(() => {
     if (searchParams.get('saved') === 'true') {
-      setSnackbarMessage('저장 완료')
-      setSnackbarVisible(true)
-      setTimeout(() => setSnackbarVisible(false), 1500)
+      notify.success('저장 완료')
       // URL 정리 (쿼리 파라미터 제거)
       window.history.replaceState({}, '', `/posts/${postId}`)
     }
   }, [searchParams, postId])
 
   // 발행 URL 동기화 (Firestore 실시간 반영)
-  const postPublishedUrls = (post as unknown as { publishedUrls?: string[] })?.publishedUrls
+  const postPublishedUrls = post?.publishedUrls
   useEffect(() => {
     if (postPublishedUrls?.length) {
       setManualUrls(postPublishedUrls)
@@ -130,7 +126,7 @@ function PostDetail() {
   const wpSyncChecked = useRef(false)
   useEffect(() => {
     if (wpSyncChecked.current || !post) return
-    const normalized = normalizeWordPressData((post as unknown as { wordpress?: Record<string, unknown> })?.wordpress)
+    const normalized = normalizeWordPressData(post?.wordpress)
     const hasPublishedSite = Object.values(normalized.sites)
       .some(d => d.wpPostId && (d.postStatus === 'published' || d.postStatus === 'scheduled'))
     if (!hasPublishedSite) return
@@ -138,23 +134,19 @@ function PostDetail() {
 
     authFetch(`/api/wordpress/publish?postId=${postId}&sync=true`)
       .then(res => res.json())
-      .catch(() => {})
+      .catch((err) => { console.warn('WordPress sync check failed:', err) })
     // onSnapshot이 Firestore 변경을 자동 반영하므로 응답 처리 불필요
   }, [post, postId, authFetch])
 
   const handleKeywordCopy = useCallback(async (keyword: string) => {
     await navigator.clipboard.writeText(keyword)
-    setSnackbarMessage(`"${keyword}" 복사됨`)
-    setSnackbarVisible(true)
-    setTimeout(() => setSnackbarVisible(false), 1500)
+    notify.success(`"${keyword}" 복사됨`)
   }, [])
 
   const handleTitleCopy = useCallback(async () => {
     if (!post?.title) return
     await navigator.clipboard.writeText(post.title)
-    setSnackbarMessage('제목 복사됨')
-    setSnackbarVisible(true)
-    setTimeout(() => setSnackbarVisible(false), 1500)
+    notify.success('제목 복사됨')
   }, [post?.title])
 
   const saveManualUrls = useCallback(async (urls: string[]) => {
@@ -169,9 +161,7 @@ function PostDetail() {
       })
       const data = await res.json()
       if (data.success) {
-        setSnackbarMessage('발행 주소 저장됨')
-        setSnackbarVisible(true)
-        setTimeout(() => setSnackbarVisible(false), 1500)
+        notify.success('발행 주소 저장됨')
         return true
       } else {
         setUrlError('저장에 실패했습니다')
@@ -249,7 +239,7 @@ function PostDetail() {
   // WP published sites
   const wpPublishedSites = useMemo(() => {
     if (!post) return []
-    const normalized = normalizeWordPressData((post as unknown as { wordpress?: Record<string, unknown> })?.wordpress)
+    const normalized = normalizeWordPressData(post?.wordpress)
     return Object.entries(normalized.sites)
       .filter(([, data]) => data.wpPostId && data.wpPostUrl && data.postStatus !== 'not_published' && data.postStatus !== 'failed')
       .map(([siteId, data]) => ({
@@ -293,6 +283,7 @@ function PostDetail() {
     if (images.length === 0 || !post?.title) return
     setZipping(true)
     try {
+      const JSZip = (await import('jszip')).default
       const zip = new JSZip()
       const results = await Promise.allSettled(
         images.map(async (url, i) => {
@@ -306,9 +297,7 @@ function PostDetail() {
       )
       const failed = results.filter(r => r.status === 'rejected').length
       if (failed > 0) {
-        setSnackbarMessage(`${failed}개 이미지 다운로드 실패`)
-        setSnackbarVisible(true)
-        setTimeout(() => setSnackbarVisible(false), 2000)
+        notify.warning(`${failed}개 이미지 다운로드 실패`)
       }
       const content = await zip.generateAsync({ type: 'blob' })
       const safeTitle = post.title.replace(/[<>:"/\\|?*]/g, '').trim()
@@ -319,9 +308,7 @@ function PostDetail() {
       URL.revokeObjectURL(a.href)
     } catch (err) {
       console.error(err)
-      setSnackbarMessage('ZIP 다운로드에 실패했습니다')
-      setSnackbarVisible(true)
-      setTimeout(() => setSnackbarVisible(false), 2000)
+      notify.error('ZIP 다운로드에 실패했습니다')
     } finally {
       setZipping(false)
     }
@@ -386,9 +373,7 @@ function PostDetail() {
       })
       const data = await res.json()
       if (data.success) {
-        setSnackbarMessage('대가성 문구가 추가되었습니다')
-        setSnackbarVisible(true)
-        setTimeout(() => setSnackbarVisible(false), 1500)
+        notify.success('대가성 문구가 추가되었습니다')
       } else {
         alert('문구 추가에 실패했습니다: ' + data.error)
       }
@@ -413,15 +398,11 @@ function PostDetail() {
         router.push('/', { scroll: false })
       } else {
         setIsDeleting(false)
-        setSnackbarMessage('삭제에 실패했습니다: ' + (data.error || ''))
-        setSnackbarVisible(true)
-        setTimeout(() => setSnackbarVisible(false), 2000)
+        notify.error('삭제에 실패했습니다: ' + (data.error || ''))
       }
     } catch (err) {
       setIsDeleting(false)
-      setSnackbarMessage('삭제에 실패했습니다.')
-      setSnackbarVisible(true)
-      setTimeout(() => setSnackbarVisible(false), 2000)
+      notify.error('삭제에 실패했습니다.')
       console.error(err)
     }
   }, [post?.id, authFetch, router, removePost])
@@ -528,7 +509,7 @@ function PostDetail() {
                 <div className="flex items-center gap-2">
                   {post.status === 'published' ? (
                     <PublishedBadge
-                      wordpress={(post as unknown as { wordpress?: Record<string, unknown> }).wordpress}
+                      wordpress={post.wordpress}
                       publishedUrls={manualUrls}
                       publishedUrl={post.publishedUrl}
                       className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-green-600 text-white border-green-700"
@@ -968,8 +949,8 @@ function PostDetail() {
 
       {/* Tab Navigation */}
       {(() => {
-        const hasSeo = !!(post as unknown as { seoAnalysis?: SeoAnalysis }).seoAnalysis
-        const hasThreads = !!(post as unknown as { threads?: ThreadsContent }).threads
+        const hasSeo = !!post.seoAnalysis
+        const hasThreads = !!post.threads
         const showTabs = hasSeo
 
         if (!showTabs) {
@@ -1023,7 +1004,7 @@ function PostDetail() {
                 {activeTab === 'content' && <PostViewer content={post.content} />}
                 {activeTab === 'seo' && hasSeo && (
                   <SeoAnalysisView
-                    seoAnalysis={(post as unknown as { seoAnalysis: SeoAnalysis }).seoAnalysis}
+                    seoAnalysis={post.seoAnalysis!}
                   />
                 )}
               </motion.div>
@@ -1034,7 +1015,7 @@ function PostDetail() {
 
       {/* Floating Menu & Slide Panels */}
       {(() => {
-        const hasThreads = !!(post as unknown as { threads?: ThreadsContent }).threads
+        const hasThreads = !!post.threads
         return (
           <>
             <FloatingActionMenu
@@ -1064,9 +1045,9 @@ function PostDetail() {
                   content: post.content,
                   keywords: post.keywords,
                   updatedAt: post.updatedAt,
-                  slug: (post as unknown as { slug?: string }).slug,
-                  excerpt: (post as unknown as { excerpt?: string }).excerpt,
-                  wordpress: (post as unknown as { wordpress?: Record<string, unknown> }).wordpress,
+                  slug: post.slug,
+                  excerpt: post.excerpt,
+                  wordpress: post.wordpress,
                 }}
               />
             </SlidePanel>
@@ -1080,7 +1061,7 @@ function PostDetail() {
               >
                 <ThreadsSection
                   postId={postId}
-                  threads={(post as unknown as { threads: ThreadsContent }).threads}
+                  threads={post.threads!}
                 />
               </SlidePanel>
             )}
@@ -1109,8 +1090,6 @@ function PostDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Snackbar */}
-      <Snackbar message={snackbarMessage} visible={snackbarVisible} />
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { addHours, format, toDate } from '@/lib/utils'
+import type { WordPressContent } from '@/lib/schemas'
 
 export function extractImagesFromHtml(content: string): string[] {
   const imgRegex = /<img[^>]+src=["']([^"']+)["']/g
@@ -142,6 +143,6 @@ export interface WordPressPanelProps {
     updatedAt?: unknown
     slug?: string
     excerpt?: string
-    wordpress?: Record<string, unknown>
+    wordpress?: WordPressContent | Record<string, unknown>
   }
 }

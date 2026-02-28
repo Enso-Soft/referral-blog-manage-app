@@ -4,8 +4,11 @@ import { ReactNode } from 'react'
 import { AuthProvider } from './AuthProvider'
 import { ThemeProvider } from './ThemeProvider'
 import { PostsProvider } from '@/context/PostsProvider'
+import { CreditProvider } from '@/context/CreditContext'
 import { ErrorBoundary } from './ErrorBoundary'
 import { QueryProvider } from '@/components/common/QueryProvider'
+import { MotionConfig } from 'framer-motion'
+import { Toaster } from 'sonner'
 
 interface ProvidersProps {
   children: ReactNode
@@ -20,11 +23,16 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <QueryProvider>
       <ThemeProvider>
-        <ErrorBoundary>
-          <AuthProvider>
-            <PostsProvider>{children}</PostsProvider>
-          </AuthProvider>
-        </ErrorBoundary>
+        <MotionConfig reducedMotion="user">
+          <ErrorBoundary>
+            <CreditProvider>
+              <AuthProvider>
+                <PostsProvider>{children}</PostsProvider>
+                <Toaster richColors position="bottom-right" />
+              </AuthProvider>
+            </CreditProvider>
+          </ErrorBoundary>
+        </MotionConfig>
       </ThemeProvider>
     </QueryProvider>
   )

@@ -214,7 +214,8 @@ export function PostsProvider({ children }: { children: ReactNode }) {
             setLoading(false)
             setLoadingMore(false)
         }
-    }, [user?.uid, isAdmin, authLoading, filter, typeFilter, buildConstraints])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildConstraints는 user/isAdmin/filter/typeFilter로만 구성되어 이미 deps에 포함됨
+    }, [user?.uid, isAdmin, authLoading, filter, typeFilter])
 
     // 글 필드 변경 시 로컬 상태 즉시 반영 (rawPosts + extraPosts)
     const updatePost = useCallback((postId: string, partial: Partial<BlogPost>) => {

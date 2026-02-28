@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect, memo } from 'react'
 import { useAuth } from './AuthProvider'
+import { useCredit } from '@/context/CreditContext'
 import { signOut } from '@/lib/auth'
 import {
   LogOut,
@@ -52,7 +53,8 @@ const NavLink = memo(function NavLink({
 })
 
 export function Header() {
-  const { user, userProfile, loading, isAdmin, totalCredit } = useAuth()
+  const { user, userProfile, loading, isAdmin } = useAuth()
+  const { totalCredit } = useCredit()
   const router = useRouter()
   const pathname = usePathname()
   const [isScrolled, setIsScrolled] = useState(false)
@@ -108,14 +110,14 @@ export function Header() {
 
           {/* Desktop Navigation */}
           {!loading && user && (
-            <div className="hidden md:flex items-center gap-1">
+            <nav aria-label="메인 네비게이션" className="hidden md:flex items-center gap-1">
               <NavLink href="/" icon={BookOpen} active={pathname === '/'}>블로그</NavLink>
               <NavLink href="/products" icon={Package} active={pathname === '/products'}>제품</NavLink>
               <NavLink href="/credits" icon={Coins} active={pathname === '/credits'}>크레딧</NavLink>
               {isAdmin && (
                 <NavLink href="/admin" icon={LayoutDashboard} active={pathname === '/admin'}>관리자</NavLink>
               )}
-            </div>
+            </nav>
           )}
         </div>
 
@@ -140,17 +142,23 @@ export function Header() {
                   </div>
 
                   <div className="relative group">
-                    <Button variant="ghost" size="icon-sm" className="rounded-full bg-secondary overflow-hidden border border-border ring-offset-background hover:ring-2 hover:ring-ring hover:ring-offset-2">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="사용자 메뉴"
+                      aria-haspopup="true"
+                      className="rounded-full bg-secondary overflow-hidden border border-border ring-offset-background hover:ring-2 hover:ring-ring hover:ring-offset-2"
+                    >
                       <User className="size-5 text-muted-foreground" />
                     </Button>
 
-                    {/* Dropdown Menu (Simple hover for demo) */}
-                    <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-border/40 bg-popover/80 backdrop-blur-lg shadow-lg p-1 opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-all transform origin-top-right scale-95 group-hover:scale-100">
+                    {/* Dropdown Menu */}
+                    <div role="menu" className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-border/40 bg-popover/80 backdrop-blur-lg shadow-lg p-1 opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-all transform origin-top-right scale-95 group-hover:scale-100">
                       <div className="space-y-1">
-                        <Link href="/settings" className="flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-lg hover:bg-secondary/50">
+                        <Link href="/settings" role="menuitem" className="flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-lg hover:bg-secondary/50">
                           <Settings className="w-4 h-4" /> 설정
                         </Link>
-                        <Button variant="ghost" onClick={handleSignOut} className="w-full justify-start px-3 py-2 h-auto text-destructive hover:bg-destructive/10 hover:text-destructive">
+                        <Button variant="ghost" role="menuitem" onClick={handleSignOut} className="w-full justify-start px-3 py-2 h-auto text-destructive hover:bg-destructive/10 hover:text-destructive">
                           <LogOut className="w-4 h-4" /> 로그아웃
                         </Button>
                       </div>
@@ -172,6 +180,8 @@ export function Header() {
               variant="ghost"
               size="icon"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label={isMobileMenuOpen ? '메뉴 닫기' : '메뉴 열기'}
+              aria-expanded={isMobileMenuOpen}
               className="-mr-2 text-muted-foreground hover:text-foreground"
             >
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}

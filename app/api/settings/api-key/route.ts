@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { getDb } from '@/lib/firebase-admin'
-import { verifyIdToken } from '@/lib/auth-admin'
-import { logger } from '@/lib/logger'
+import { createApiHandler } from '@/lib/api-handler'
+import { hashApiKey } from '@/lib/crypto'
 
 // API 키 생성 함수
 function generateApiKey(): string {
@@ -11,35 +11,17 @@ function generateApiKey(): string {
 }
 
 // POST: API 키 재발급
-export async function POST(request: NextRequest) {
-  try {
-    // 토큰 검증
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: '인증이 필요합니다' },
-        { status: 401 }
-      )
-    }
+export const POST = createApiHandler({ auth: 'bearer' }, async (request: NextRequest, { auth }) => {
+  const db = getDb()
+  const userRef = db.collection('users').doc(auth!.userId)
 
-    const token = authHeader.replace('Bearer ', '')
-    const decodedToken = await verifyIdToken(token)
+  // 새 API 키 생성 및 업데이트 (해시만 저장)
+  const newApiKey = generateApiKey()
+  await userRef.update({
+    apiKey: newApiKey, // 하위호환용 (마이그레이션 완료 후 제거)
+    apiKeyHash: hashApiKey(newApiKey),
+    apiKeyCreatedAt: new Date(),
+  })
 
-    const db = getDb()
-    const userRef = db.collection('users').doc(decodedToken.uid)
-
-    // 새 API 키 생성 및 업데이트
-    const newApiKey = generateApiKey()
-    await userRef.update({
-      apiKey: newApiKey,
-    })
-
-    return NextResponse.json({ success: true, apiKey: newApiKey })
-  } catch (error) {
-    logger.error('API key regenerate error:', error)
-    return NextResponse.json(
-      { success: false, error: 'API 키 재발급에 실패했습니다' },
-      { status: 500 }
-    )
-  }
-}
+  return NextResponse.json({ success: true, apiKey: newApiKey })
+})

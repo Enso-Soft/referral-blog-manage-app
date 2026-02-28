@@ -3,14 +3,14 @@
 import Link from 'next/link'
 import { Coins } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { useAuth } from '@/components/layout/AuthProvider'
+import { useCredit } from '@/context/CreditContext'
 import { useCreditAnimation } from '@/hooks/useCreditAnimation'
 import { CreditBalanceCard } from './CreditBalanceCard'
 import { CreditTransactionList } from './CreditTransactionList'
 import { cn } from '@/lib/utils'
 
 export function CreditPopover() {
-  const { sCredit, eCredit, totalCredit } = useAuth()
+  const { sCredit, eCredit, totalCredit } = useCredit()
   const { isChanged, direction } = useCreditAnimation(sCredit, eCredit)
 
   return (
@@ -59,8 +59,8 @@ export function CreditPopover() {
   )
 }
 
-/** Popover 내부 잔액 표시 — useAuth에서 직접 읽음 */
+/** Popover 내부 잔액 표시 — useCredit에서 직접 읽음 */
 function CreditBalanceCardInner() {
-  const { sCredit, eCredit } = useAuth()
+  const { sCredit, eCredit } = useCredit()
   return <CreditBalanceCard sCredit={sCredit} eCredit={eCredit} size="sm" />
 }

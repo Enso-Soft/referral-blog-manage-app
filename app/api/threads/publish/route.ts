@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
-import { getAuthFromRequest } from '@/lib/auth-admin'
-import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
+import { createApiHandler } from '@/lib/api-handler'
+import { requireResource, requirePermission } from '@/lib/api-error-handler'
 import {
   createThreadsContainer,
   publishThreadsContainer,
@@ -11,10 +11,7 @@ import {
 import type { FirestoreUserData } from '@/lib/schemas/user'
 
 // POST: Threads에 포스팅
-export async function POST(request: NextRequest) {
-  try {
-    const auth = await getAuthFromRequest(request)
-    requireAuth(auth)
+export const POST = createApiHandler({ auth: 'bearer' }, async (request, { auth }) => {
 
     const { postId } = await request.json()
     if (!postId) {
@@ -33,7 +30,7 @@ export async function POST(request: NextRequest) {
     const postData = postDoc.data()!
 
     // 소유권 확인
-    requirePermission(postData.userId === auth.userId, '이 게시글에 대한 권한이 없습니다.')
+    requirePermission(postData.userId === auth!.userId, '이 게시글에 대한 권한이 없습니다.')
 
     // threads 데이터 확인
     if (!postData.threads?.text) {
@@ -44,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. 사용자 Threads 토큰 확인
-    const userDoc = await db.collection('users').doc(auth.userId).get()
+    const userDoc = await db.collection('users').doc(auth!.userId).get()
     const userData = userDoc.data() as FirestoreUserData | undefined
 
     if (!userData?.threadsAccessToken) {
@@ -128,7 +125,4 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
-  } catch (error) {
-    return handleApiError(error)
-  }
-}
+})

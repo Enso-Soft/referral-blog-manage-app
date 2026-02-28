@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useAuth } from '@/components/layout/AuthProvider'
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 
 export function useAuthFetch() {
   const { getAuthToken } = useAuth()
@@ -17,7 +18,7 @@ export function useAuthFetch() {
         headers.set('Authorization', `Bearer ${token}`)
       }
 
-      return fetch(url, {
+      return fetchWithTimeout(url, {
         ...options,
         headers,
       })

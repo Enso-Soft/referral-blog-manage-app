@@ -58,6 +58,13 @@ export function formatRelativeTimeFns(timestamp: unknown): string {
     return formatDistanceToNow(date, { addSuffix: true, locale: ko })
 }
 
+/**
+ * HTML 콘텐츠에서 태그와 공백을 제거한 순수 글자 수
+ */
+export function countContentChars(html: string): number {
+    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, '').length
+}
+
 export { format, formatDistanceToNow, addHours } from 'date-fns'
 export { ko as koLocale } from 'date-fns/locale'
 

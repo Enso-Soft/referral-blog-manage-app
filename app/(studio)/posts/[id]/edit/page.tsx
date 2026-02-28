@@ -6,6 +6,7 @@ import { PostEditor } from '@/components/post/PostEditor'
 import { ProductEditor } from '@/components/product/ProductEditor'
 import { AuthGuard } from '@/components/layout/AuthGuard'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
+import { countContentChars } from '@/lib/utils'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Product } from '@/lib/firestore'
@@ -22,11 +23,6 @@ interface Post {
   }
 }
 
-// 글자 수 계산
-function countWords(html: string): number {
-  const text = html.replace(/<[^>]*>/g, '').replace(/\s+/g, '')
-  return text.length
-}
 
 function PostEditContent() {
   const params = useParams()
@@ -81,7 +77,7 @@ function PostEditContent() {
           products,
           metadata: {
             ...post.metadata,
-            wordCount: countWords(content),
+            wordCount: countContentChars(content),
           },
         }),
       })

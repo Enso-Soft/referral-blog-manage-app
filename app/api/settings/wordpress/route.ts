@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/firebase-admin'
-import { getAuthFromRequest } from '@/lib/auth-admin'
-import { handleApiError, requireAuth } from '@/lib/api-error-handler'
+import { handleApiError } from '@/lib/api-error-handler'
+import { createApiHandler } from '@/lib/api-handler'
 import { validateWPConnection, detectWordPress, normalizeUrl, getAllWPSitesFromUserData } from '@/lib/wordpress-api'
 import { encrypt, isEncrypted } from '@/lib/crypto'
 import type { FirestoreUserData } from '@/lib/schemas/user'
@@ -40,11 +40,8 @@ async function migrateIfNeeded(
 }
 
 // POST: WordPress 사이트 추가
-export async function POST(request: NextRequest) {
+export const POST = createApiHandler({ auth: 'bearer' }, async (request: NextRequest, { auth }) => {
   try {
-    const auth = await getAuthFromRequest(request)
-    requireAuth(auth)
-
     const { siteUrl, username, appPassword } = await request.json()
     if (!siteUrl || !username || !appPassword) {
       return NextResponse.json(
@@ -65,16 +62,16 @@ export async function POST(request: NextRequest) {
     const { FieldValue } = await import('firebase-admin/firestore')
 
     // 사용자 데이터 조회 (레거시 마이그레이션 필요 여부 확인)
-    const userDoc = await db.collection('users').doc(auth.userId).get()
+    const userDoc = await db.collection('users').doc(auth!.userId).get()
     const userData = (userDoc.data() || {}) as FirestoreUserData
 
     // 레거시 flat 필드 마이그레이션
-    await migrateIfNeeded(db, auth.userId, userData)
+    await migrateIfNeeded(db, auth!.userId, userData)
 
     // 새 사이트 ID 생성
     const siteId = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
 
-    await db.collection('users').doc(auth.userId).update({
+    await db.collection('users').doc(auth!.userId).update({
       [`wpSites.${siteId}`]: {
         siteUrl: normalizedUrl,
         username,
@@ -102,69 +99,55 @@ export async function POST(request: NextRequest) {
     }
     return handleApiError(error)
   }
-}
+})
 
 // GET: WordPress 사이트 목록 조회
-export async function GET(request: NextRequest) {
-  try {
-    const auth = await getAuthFromRequest(request)
-    requireAuth(auth)
+export const GET = createApiHandler({ auth: 'bearer' }, async (request: NextRequest, { auth }) => {
+  const db = getDb()
+  const userDoc = await db.collection('users').doc(auth!.userId).get()
+  const userData = (userDoc.data() || {}) as FirestoreUserData
 
-    const db = getDb()
-    const userDoc = await db.collection('users').doc(auth.userId).get()
-    const userData = (userDoc.data() || {}) as FirestoreUserData
+  // 레거시 flat 필드 마이그레이션
+  await migrateIfNeeded(db, auth!.userId, userData)
 
-    // 레거시 flat 필드 마이그레이션
-    await migrateIfNeeded(db, auth.userId, userData)
-
-    // 마이그레이션 후 최신 데이터로 다시 읽기 (마이그레이션 발생 시)
-    let sites = getAllWPSitesFromUserData(userData)
-    if (sites.length === 0 && (userData.wpSiteUrl || userData.wpSites)) {
-      const freshDoc = await db.collection('users').doc(auth.userId).get()
-      sites = getAllWPSitesFromUserData((freshDoc.data() || {}) as FirestoreUserData)
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        sites: sites.map(s => ({
-          id: s.id,
-          siteUrl: s.siteUrl,
-          displayName: s.displayName || null,
-        })),
-      },
-    })
-  } catch (error) {
-    return handleApiError(error)
+  // 마이그레이션 후 최신 데이터로 다시 읽기 (마이그레이션 발생 시)
+  let sites = getAllWPSitesFromUserData(userData)
+  if (sites.length === 0 && (userData.wpSiteUrl || userData.wpSites)) {
+    const freshDoc = await db.collection('users').doc(auth!.userId).get()
+    sites = getAllWPSitesFromUserData((freshDoc.data() || {}) as FirestoreUserData)
   }
-}
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      sites: sites.map(s => ({
+        id: s.id,
+        siteUrl: s.siteUrl,
+        displayName: s.displayName || null,
+      })),
+    },
+  })
+})
 
 // DELETE: WordPress 사이트 연결 해제
-export async function DELETE(request: NextRequest) {
-  try {
-    const auth = await getAuthFromRequest(request)
-    requireAuth(auth)
-
-    const siteId = request.nextUrl.searchParams.get('siteId')
-    if (!siteId) {
-      return NextResponse.json(
-        { success: false, error: 'siteId 쿼리 파라미터는 필수입니다.' },
-        { status: 400 }
-      )
-    }
-
-    const db = getDb()
-    const { FieldValue } = await import('firebase-admin/firestore')
-
-    await db.collection('users').doc(auth.userId).update({
-      [`wpSites.${siteId}`]: FieldValue.delete(),
-    })
-
-    return NextResponse.json({
-      success: true,
-      message: 'WordPress 연결이 해제되었습니다.',
-    })
-  } catch (error) {
-    return handleApiError(error)
+export const DELETE = createApiHandler({ auth: 'bearer' }, async (request: NextRequest, { auth }) => {
+  const siteId = request.nextUrl.searchParams.get('siteId')
+  if (!siteId) {
+    return NextResponse.json(
+      { success: false, error: 'siteId 쿼리 파라미터는 필수입니다.' },
+      { status: 400 }
+    )
   }
-}
+
+  const db = getDb()
+  const { FieldValue } = await import('firebase-admin/firestore')
+
+  await db.collection('users').doc(auth!.userId).update({
+    [`wpSites.${siteId}`]: FieldValue.delete(),
+  })
+
+  return NextResponse.json({
+    success: true,
+    message: 'WordPress 연결이 해제되었습니다.',
+  })
+})

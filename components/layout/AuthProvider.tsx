@@ -6,6 +6,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 import { getFirebaseDb } from '@/lib/firebase'
 import { queryKeys } from '@/lib/query-client'
+import { useCredit } from '@/context/CreditContext'
 
 interface UserProfile {
   role: 'admin' | 'user'
@@ -17,10 +18,6 @@ interface AuthContextType {
   userProfile: UserProfile | null
   loading: boolean
   isAdmin: boolean
-  sCredit: number
-  eCredit: number
-  totalCredit: number
-  refreshCredits: () => Promise<void>
   getAuthToken: () => Promise<string | null>
 }
 
@@ -29,10 +26,6 @@ const AuthContext = createContext<AuthContextType>({
   userProfile: null,
   loading: true,
   isAdmin: false,
-  sCredit: 0,
-  eCredit: 0,
-  totalCredit: 0,
-  refreshCredits: async () => {},
   getAuthToken: async () => null,
 })
 
@@ -54,12 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [sCredit, setSCredit] = useState(0)
-  const [eCredit, setECredit] = useState(0)
   const profileLoaded = useRef(false)
   const checkinAttempted = useRef(false)
   const creditUnsubscribe = useRef<(() => void) | null>(null)
   const queryClient = useQueryClient()
+  const { setSCredit, setECredit } = useCredit()
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -191,15 +183,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // onSnapshot이 실시간 반영하므로 수동 refresh는 no-op (하위호환 유지)
-  const refreshCredits = useCallback(async () => {}, [])
-
   const isAdmin = userProfile?.role === 'admin'
-  const totalCredit = sCredit + eCredit
 
   const value = useMemo(() => ({
-    user, userProfile, loading, isAdmin, sCredit, eCredit, totalCredit, refreshCredits, getAuthToken
-  }), [user, userProfile, loading, isAdmin, sCredit, eCredit, totalCredit, refreshCredits, getAuthToken])
+    user, userProfile, loading, isAdmin, getAuthToken
+  }), [user, userProfile, loading, isAdmin, getAuthToken])
 
   return (
     <AuthContext.Provider value={value}>

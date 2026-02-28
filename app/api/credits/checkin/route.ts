@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
-import { getAuthFromRequest } from '@/lib/auth-admin'
-import { handleApiError, requireAuth } from '@/lib/api-error-handler'
+import { createApiHandler } from '@/lib/api-handler'
 import { getCreditSettings } from '@/lib/credit-operations'
 
 // POST: 출석 체크 (1일 1회, S'Credit 상한 적용)
-export async function POST(request: NextRequest) {
+export const POST = createApiHandler({ auth: 'bearer' }, async (request, { auth }) => {
+  const settings = await getCreditSettings()
+  const db = getDb()
+  const userRef = db.collection('users').doc(auth.userId)
+  const txnRef = db.collection('credit_transactions').doc()
+
   try {
-    const auth = await getAuthFromRequest(request)
-    requireAuth(auth)
-
-    const settings = await getCreditSettings()
-    const db = getDb()
-    const userRef = db.collection('users').doc(auth.userId)
-    const txnRef = db.collection('credit_transactions').doc()
-
     const result = await db.runTransaction(async (transaction) => {
       const userDoc = await transaction.get(userRef)
       if (!userDoc.exists) {
@@ -94,6 +90,6 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       )
     }
-    return handleApiError(error)
+    throw error
   }
-}
+})

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { normalizeWordPressData } from '@/lib/wordpress-api'
 import { getFaviconUrl } from '@/lib/url-utils'
 import { cn } from '@/lib/utils'
+import type { WordPressContent } from '@/lib/schemas'
 
 interface PublishedSiteInfo {
   key: string
@@ -12,7 +13,7 @@ interface PublishedSiteInfo {
 }
 
 interface PublishedBadgeProps {
-  wordpress?: Record<string, unknown>
+  wordpress?: WordPressContent | Record<string, unknown>
   publishedUrls?: string[]
   publishedUrl?: string
   className?: string

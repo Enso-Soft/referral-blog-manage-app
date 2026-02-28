@@ -54,7 +54,7 @@ export function ProductEditor({ products, onChange }: ProductEditorProps) {
         <div className="space-y-2 mb-4">
           {products.map((product, index) => (
             <div
-              key={index}
+              key={product.affiliateLink || index}
               className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
             >
               <div className="flex-1 min-w-0">

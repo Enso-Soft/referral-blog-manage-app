@@ -20,10 +20,18 @@ const MAGIC_BYTES: Record<string, number[][]> = {
  * @returns true면 유효, false면 위조 의심
  */
 export function validateImageBuffer(buffer: Buffer, declaredMimeType: string): boolean {
-  // SVG는 텍스트 기반이므로 magic byte 검증 불가 → XML/SVG 태그 존재 여부로 검증
+  // SVG는 텍스트 기반이므로 magic byte 검증 불가 → XML/SVG 태그 존재 여부로 검증 + XSS 패턴 차단
   if (declaredMimeType === 'image/svg+xml') {
-    const head = buffer.subarray(0, 256).toString('utf-8').toLowerCase()
-    return head.includes('<svg') || head.includes('<?xml')
+    const text = buffer.toString('utf-8').toLowerCase()
+    const head = text.substring(0, 256)
+    if (!head.includes('<svg') && !head.includes('<?xml')) return false
+
+    // XSS 위험 패턴 차단
+    if (/<script[\s>]/i.test(text)) return false
+    if (/\bon\w+\s*=/i.test(text)) return false
+    if (/javascript\s*:/i.test(text)) return false
+
+    return true
   }
 
   const signatures = MAGIC_BYTES[declaredMimeType]

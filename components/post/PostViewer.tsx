@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import DOMPurify from 'dompurify'
+import { sanitizeHtml } from '@/lib/sanitize'
 
 const STORAGE_KEY = 'blog-content-width'
 const PRESETS = [
@@ -16,10 +16,7 @@ interface PostViewerProps {
 
 export function PostViewer({ content }: PostViewerProps) {
   const [width, setWidth] = useState<number | null>(null)
-  const sanitizedContent = useMemo(() => DOMPurify.sanitize(content, {
-    ADD_ATTR: ['target', 'rel', 'style'],
-    ADD_TAGS: ['iframe'],
-  }), [content])
+  const sanitizedContent = useMemo(() => sanitizeHtml(content), [content])
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)

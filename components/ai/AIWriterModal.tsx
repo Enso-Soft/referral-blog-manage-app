@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
-import { useAuth } from '@/components/layout/AuthProvider'
+import { useCredit } from '@/context/CreditContext'
 import {
   type AIWriteOptions,
   type AIWriteRequest,
@@ -527,7 +527,7 @@ function CreditFooter({
   isPromptEmpty: boolean
   onSubmit: () => void
 }) {
-  const { totalCredit } = useAuth()
+  const { totalCredit } = useCredit()
   const cost = DEFAULT_CREDIT_SETTINGS.aiWritePreChargeAmount
   const isInsufficient = totalCredit < cost
 

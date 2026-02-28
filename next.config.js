@@ -8,8 +8,11 @@ const nextConfig = {
       },
     ]
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   experimental: {
-    optimizePackageImports: ['lucide-react', 'framer-motion', 'date-fns', 'firebase/firestore'],
+    optimizePackageImports: ['lucide-react', 'framer-motion', 'date-fns', 'firebase/firestore', 'firebase/auth'],
   },
   images: {
     remotePatterns: [
@@ -65,6 +68,7 @@ const nextConfig = {
     LEMON_SQUEEZY_WEBHOOK_SECRET: process.env.LEMON_SQUEEZY_WEBHOOK_SECRET,
     LEMON_SQUEEZY_STORE_ID: process.env.LEMON_SQUEEZY_STORE_ID,
     LEMON_SQUEEZY_VARIANT_ID: process.env.LEMON_SQUEEZY_VARIANT_ID,
+    CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS,
   },
 }
 

@@ -2,7 +2,11 @@ import 'server-only'
 import { getAuth } from 'firebase-admin/auth'
 import { getApps, initializeApp, cert, type ServiceAccount } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { hashApiKey } from '@/lib/crypto'
+import { TTLCache } from '@/lib/cache'
 import { logger } from '@/lib/logger'
+
+const API_KEY_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000 // 90일
 
 // Firebase Admin 초기화 (중복 초기화 방지)
 function ensureAdminInitialized() {
@@ -42,39 +46,23 @@ export async function verifyIdToken(token: string) {
   return decodedToken
 }
 
-// 사용자 데이터 캐시 (역할 + API 키)
-const userDataCache = new Map<string, { role: 'admin' | 'user'; apiKey?: string; expiry: number }>()
-const CACHE_TTL = 5 * 60 * 1000 // 5분
-const MAX_CACHE_SIZE = 1000
-const EVICT_COUNT = 100
-
-/** 캐시가 최대 크기를 초과하면 가장 오래된 엔트리를 제거 */
-function evictCacheIfNeeded() {
-  if (userDataCache.size < MAX_CACHE_SIZE) return
-  let removed = 0
-  for (const key of userDataCache.keys()) {
-    if (removed >= EVICT_COUNT) break
-    userDataCache.delete(key)
-    removed++
-  }
-}
+// 사용자 데이터 캐시 (역할 + API 키) — TTLCache 활용
+const userDataCache = new TTLCache<{ role: 'admin' | 'user'; apiKey?: string }>(5 * 60 * 1000, 1000, 100)
 
 async function getCachedUserData(userId: string): Promise<{ role: 'admin' | 'user'; apiKey?: string }> {
   const cached = userDataCache.get(userId)
-  if (cached && Date.now() < cached.expiry) {
-    return { role: cached.role, apiKey: cached.apiKey }
-  }
+  if (cached) return cached
 
   ensureAdminInitialized()
   const db = getFirestore()
   const userDoc = await db.collection('users').doc(userId).get()
 
-  const role = userDoc.exists && userDoc.data()?.role === 'admin' ? 'admin' : 'user'
+  const role: 'admin' | 'user' = userDoc.exists && userDoc.data()?.role === 'admin' ? 'admin' : 'user'
   const apiKey = userDoc.exists ? userDoc.data()?.apiKey : undefined
 
-  evictCacheIfNeeded()
-  userDataCache.set(userId, { role, apiKey, expiry: Date.now() + CACHE_TTL })
-  return { role, apiKey }
+  const data = { role, apiKey }
+  userDataCache.set(userId, data)
+  return data
 }
 
 // 사용자 역할 확인 (Firestore users 컬렉션에서, 캐싱 적용)
@@ -134,7 +122,14 @@ export async function getAuthFromApiKey(request: Request): Promise<{
   try {
     ensureAdminInitialized()
     const db = getFirestore()
-    const snapshot = await db.collection('users').where('apiKey', '==', apiKey).limit(1).get()
+
+    // 해시 기반 조회 (우선) → 평문 fallback (하위호환)
+    const keyHash = hashApiKey(apiKey)
+    let snapshot = await db.collection('users').where('apiKeyHash', '==', keyHash).limit(1).get()
+    if (snapshot.empty) {
+      // 레거시: 평문 apiKey로 조회 (마이그레이션 전 데이터)
+      snapshot = await db.collection('users').where('apiKey', '==', apiKey).limit(1).get()
+    }
 
     if (snapshot.empty) {
       return null
@@ -142,13 +137,20 @@ export async function getAuthFromApiKey(request: Request): Promise<{
 
     const doc = snapshot.docs[0]
     const data = doc.data()
+
+    // API Key 만료 확인 (90일)
+    const createdAt = data?.apiKeyCreatedAt?.toDate?.() ?? data?.apiKeyCreatedAt
+    if (createdAt instanceof Date && Date.now() - createdAt.getTime() > API_KEY_MAX_AGE_MS) {
+      logger.warn(`API Key expired for user ${doc.id}`)
+      return null
+    }
+
     const adminStatus = data?.role === 'admin'
 
     // 캐시에 저장
     userDataCache.set(doc.id, {
       role: adminStatus ? 'admin' : 'user',
       apiKey,
-      expiry: Date.now() + CACHE_TTL,
     })
 
     return {
