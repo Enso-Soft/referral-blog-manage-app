@@ -27,11 +27,9 @@ export function CreditProvider({ children }: { children: ReactNode }) {
   // onSnapshot이 실시간 반영하므로 수동 refresh는 no-op (하위호환 유지)
   const refreshCredits = useCallback(async () => {}, [])
 
-  const totalCredit = sCredit + eCredit
-
   const value = useMemo(() => ({
-    sCredit, eCredit, totalCredit, setSCredit, setECredit, refreshCredits,
-  }), [sCredit, eCredit, totalCredit, refreshCredits])
+    sCredit, eCredit, totalCredit: sCredit + eCredit, setSCredit, setECredit, refreshCredits,
+  }), [sCredit, eCredit, refreshCredits])
 
   return (
     <CreditContext.Provider value={value}>

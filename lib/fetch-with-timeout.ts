@@ -5,15 +5,20 @@ export async function fetchWithTimeout(
   input: RequestInfo | URL,
   init?: RequestInit & { timeout?: number }
 ): Promise<Response> {
-  const { timeout = 30000, ...fetchInit } = init ?? {}
+  const { timeout = 30000, signal: callerSignal, ...fetchInit } = init ?? {}
 
   const controller = new AbortController()
   const id = setTimeout(() => controller.abort(), timeout)
 
+  // caller의 signal과 타임아웃 signal 합성
+  const signal = callerSignal
+    ? AbortSignal.any([controller.signal, callerSignal])
+    : controller.signal
+
   try {
     const response = await fetch(input, {
       ...fetchInit,
-      signal: controller.signal,
+      signal,
     })
     return response
   } catch (error) {

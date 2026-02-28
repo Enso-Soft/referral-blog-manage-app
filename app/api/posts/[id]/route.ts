@@ -14,8 +14,7 @@ type UpdateData = Partial<z.infer<typeof UpdatePostSchema>> & {
 
 // GET: 단일 포스트 조회
 export const GET = createApiHandler({ auth: 'bearer' }, async (_request, { auth, params }) => {
-  const { docRef, data } = await getOwnedDocument('blog_posts', params!.id, auth!, '포스트')
-  const doc = await docRef.get()
+  const { doc, data } = await getOwnedDocument('blog_posts', params!.id, auth!, '포스트')
 
   return NextResponse.json({
     success: true,

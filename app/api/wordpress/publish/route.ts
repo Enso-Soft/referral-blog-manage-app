@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { createApiHandler } from '@/lib/api-handler'
-import { getOwnedDocument } from '@/lib/api-helpers'
+import { getOwnedDocument, getDecryptedWPConnection } from '@/lib/api-helpers'
+import type { FirestoreUserData } from '@/lib/schemas/user'
 import {
   createWPPost, updateWPPost, deleteWPPost, checkWPPostExists,
   migrateImagesToWP,
@@ -41,9 +42,15 @@ export const GET = createApiHandler({ auth: 'bearer' }, async (request, { auth }
     let anySynced = false
     const updateObj: Record<string, unknown> = {}
 
+    // 사용자 문서를 한 번만 읽어서 루프 내 N+1 방지
+    const userDoc = await db.collection('users').doc(auth.userId).get()
+    const userData = userDoc.data()
+
     for (const [siteId, siteData] of entriesToCheck) {
-      const wpConn = await getWPConnection(auth.userId, siteId)
-      if (!wpConn || !siteData.wpPostId) continue
+      if (!userData || !siteData.wpPostId) continue
+      const connResult = getDecryptedWPConnection(userData as FirestoreUserData, siteId)
+      if (!connResult) continue
+      const wpConn = { conn: { siteUrl: connResult.siteUrl, username: connResult.username, appPassword: connResult.appPassword } }
 
       const exists = await checkWPPostExists(wpConn.conn, siteData.wpPostId)
       if (!exists) {
@@ -54,17 +61,14 @@ export const GET = createApiHandler({ auth: 'bearer' }, async (request, { auth }
 
     if (anySynced) {
       updateObj['wordpress.publishHistory'] = normalized.publishHistory
-      await db.collection('blog_posts').doc(postId).update(updateObj)
 
       const remainingSites = { ...normalized.sites }
       for (const [siteId] of entriesToCheck) {
         if (updateObj[`wordpress.sites.${siteId}`]) delete remainingSites[siteId]
       }
 
-      const statusUpdate = buildOverallStatusUpdate(remainingSites)
-      if (Object.keys(statusUpdate).length > 0) {
-        await db.collection('blog_posts').doc(postId).update(statusUpdate)
-      }
+      Object.assign(updateObj, buildOverallStatusUpdate(remainingSites))
+      await db.collection('blog_posts').doc(postId).update(updateObj)
 
       return NextResponse.json({ success: true, data: { synced: true, exists: false } })
     }
