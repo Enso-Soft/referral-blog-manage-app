@@ -56,6 +56,8 @@ export const CreditSettingsSchema = z.object({
   aiChatPerMessageCost: z.number().default(500),
   /** WordPress 발행 비용 */
   wpPublishCost: z.number().default(100),
+  /** AI 헤어스타일 미리보기 선결제 금액 */
+  aiHairstylePreChargeAmount: z.number().default(1000),
   /** E'Credit 환율: 1원당 지급되는 E'Credit 수 */
   creditPerWon: z.number().default(5),
 })
@@ -70,6 +72,7 @@ export const DEFAULT_CREDIT_SETTINGS: CreditSettings = {
   aiWritePreChargeAmount: 5000,
   aiChatPerMessageCost: 500,
   wpPublishCost: 100,
+  aiHairstylePreChargeAmount: 1000,
   creditPerWon: 5,
 }
 

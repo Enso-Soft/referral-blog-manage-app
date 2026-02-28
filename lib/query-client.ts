@@ -47,4 +47,7 @@ export const queryKeys = {
     transactions: (type?: string) =>
       [...queryKeys.credits.all, 'transactions', type ?? null] as const,
   },
+  hairstyleRequests: {
+    all: ['hairstyle-requests'] as const,
+  },
 } as const

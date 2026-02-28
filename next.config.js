@@ -69,6 +69,7 @@ const nextConfig = {
     LEMON_SQUEEZY_STORE_ID: process.env.LEMON_SQUEEZY_STORE_ID,
     LEMON_SQUEEZY_VARIANT_ID: process.env.LEMON_SQUEEZY_VARIANT_ID,
     CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   },
 }
 

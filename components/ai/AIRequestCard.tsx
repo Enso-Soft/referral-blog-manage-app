@@ -26,6 +26,7 @@ interface AIRequestCardProps {
   onDismiss: (requestId: string) => Promise<void>
   onClick: (request: AIWriteRequest) => void
   onPendingClick?: () => void
+  className?: string
 }
 
 export function AIRequestCard({
@@ -34,6 +35,7 @@ export function AIRequestCard({
   onDelete,
   onDismiss,
   onClick,
+  className,
 }: AIRequestCardProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDismissing, setIsDismissing] = useState(false)
@@ -91,6 +93,7 @@ export function AIRequestCard({
           'relative cursor-pointer flex-shrink-0',
           'w-[280px] p-4 rounded-xl flex flex-col',
           'border',
+          className,
           isPending && [
             'bg-violet-50 dark:bg-violet-950/30',
             'border-violet-200 dark:border-violet-800/50',

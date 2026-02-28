@@ -167,3 +167,21 @@ export async function resizeImageFile(
         img.src = URL.createObjectURL(file)
     })
 }
+
+/** 이미지 URL을 다운로드 (클라이언트 전용) */
+export async function downloadImage(url: string, filename?: string): Promise<void> {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename ?? `image-${Date.now()}.webp`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 100)
+  } catch {
+    window.open(url, '_blank')
+  }
+}

@@ -353,10 +353,13 @@ export async function grantCredits(
 export async function settleAIRequest(
   requestId: string,
   actualCost: number,
-  status: 'success' | 'failed'
+  status: 'success' | 'failed',
+  collectionName: string = 'ai_write_requests',
+  referenceType: string = 'ai_write_request',
+  descriptionPrefix: string = 'AI 글 작성'
 ): Promise<void> {
   const db = getDb()
-  const requestRef = db.collection('ai_write_requests').doc(requestId)
+  const requestRef = db.collection(collectionName).doc(requestId)
   const requestDoc = await requestRef.get()
 
   if (!requestDoc.exists) {
@@ -386,9 +389,9 @@ export async function settleAIRequest(
       sCreditCharged,
       eCreditCharged,
       'credit',
-      `AI 글 작성 실패 - ${totalAmount.toLocaleString()} 전액 환급`,
+      `${descriptionPrefix} 실패 - ${totalAmount.toLocaleString()} 전액 환급`,
       requestId,
-      'ai_write_request',
+      referenceType,
       { preChargeTransactionId: preChargeTxnId }
     )
 
@@ -423,9 +426,9 @@ export async function settleAIRequest(
         userId,
         diff,
         'debit',
-        `AI 글 작성 정산 - ${diff.toLocaleString()} 추가 차감`,
+        `${descriptionPrefix} 정산 - ${diff.toLocaleString()} 추가 차감`,
         requestId,
-        'ai_write_request',
+        referenceType,
         { preChargeTransactionId: preChargeTxnId, preChargeAmount: totalAmount, actualCost }
       )
 
@@ -450,9 +453,9 @@ export async function settleAIRequest(
             userId,
             partialAmount,
             'debit',
-            `AI 글 작성 정산 - ${partialAmount.toLocaleString()}/${diff.toLocaleString()} 부분 차감`,
+            `${descriptionPrefix} 정산 - ${partialAmount.toLocaleString()}/${diff.toLocaleString()} 부분 차감`,
             requestId,
-            'ai_write_request',
+            referenceType,
             { preChargeTransactionId: preChargeTxnId, shortfall: diff - partialAmount }
           )
 
@@ -473,9 +476,9 @@ export async function settleAIRequest(
             eCreditDelta: 0,
             sCreditAfter: 0,
             eCreditAfter: 0,
-            description: `AI 글 작성 정산 - 잔액 부족 (미회수 ${diff.toLocaleString()})`,
+            description: `${descriptionPrefix} 정산 - 잔액 부족 (미회수 ${diff.toLocaleString()})`,
             referenceId: requestId,
-            referenceType: 'ai_write_request',
+            referenceType,
             metadata: { shortfall: diff, preChargeTransactionId: preChargeTxnId },
             createdAt: Timestamp.now(),
           })
@@ -507,9 +510,9 @@ export async function settleAIRequest(
     sRefund,
     eRefund,
     'credit',
-    `AI 글 작성 정산 - ${refundAmount.toLocaleString()} 차액 환급`,
+    `${descriptionPrefix} 정산 - ${refundAmount.toLocaleString()} 차액 환급`,
     requestId,
-    'ai_write_request',
+    referenceType,
     { preChargeTransactionId: preChargeTxnId, preChargeAmount: totalAmount, actualCost }
   )
 
