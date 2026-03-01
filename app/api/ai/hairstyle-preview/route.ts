@@ -4,7 +4,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { v4 as uuidv4 } from 'uuid'
 import { format } from 'date-fns'
 import sharp from 'sharp'
-import { GoogleGenAI } from '@google/genai'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
@@ -43,13 +43,13 @@ async function uploadToS3(
   dateFolder: string,
   prefix: string,
   options?: { resize?: boolean }
-): Promise<{ url: string; buffer: Buffer }> {
+): Promise<{ url: string; buffer: Buffer; width: number; height: number }> {
   const s3Config = getS3Config()
   const s3Client = getS3Client()
 
-  const finalBuffer = options?.resize !== false
-    ? await sharp(webpBuffer).resize({ width: 1024, height: 1024, fit: 'inside' }).webp({ quality: 80 }).toBuffer()
-    : await sharp(webpBuffer).webp({ quality: 85 }).toBuffer()
+  const { data: finalBuffer, info } = options?.resize !== false
+    ? await sharp(webpBuffer).resize({ width: 1024, height: 1024, fit: 'inside' }).webp({ quality: 80 }).toBuffer({ resolveWithObject: true })
+    : await sharp(webpBuffer).webp({ quality: 85 }).toBuffer({ resolveWithObject: true })
 
   const uniqueId = uuidv4().slice(0, 8)
   const s3Key = `ai_hairstyle/${dateFolder}/${prefix}_${uniqueId}.webp`
@@ -66,7 +66,37 @@ async function uploadToS3(
   return {
     url: buildS3Url(s3Config.bucket, s3Config.region, s3Key),
     buffer: finalBuffer,
+    width: info.width,
+    height: info.height,
   }
+}
+
+// Gemini SDK 지원 aspect ratio만 포함 (4:5, 5:4 등은 미지원)
+type GeminiAspectRatio = '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '9:16' | '16:9' | '21:9'
+
+const SUPPORTED_ASPECT_RATIOS: readonly { label: GeminiAspectRatio; value: number }[] = [
+  { label: '9:16', value: 9 / 16 },
+  { label: '2:3', value: 2 / 3 },
+  { label: '3:4', value: 3 / 4 },
+  { label: '1:1', value: 1 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '3:2', value: 3 / 2 },
+  { label: '16:9', value: 16 / 9 },
+  { label: '21:9', value: 21 / 9 },
+]
+
+function detectAspectRatio(width: number, height: number): GeminiAspectRatio {
+  const ratio = width / height
+  let closestLabel: GeminiAspectRatio = SUPPORTED_ASPECT_RATIOS[0].label
+  let minDiff = Math.abs(ratio - SUPPORTED_ASPECT_RATIOS[0].value)
+  for (const ar of SUPPORTED_ASPECT_RATIOS) {
+    const diff = Math.abs(ratio - ar.value)
+    if (diff < minDiff) {
+      minDiff = diff
+      closestLabel = ar.label
+    }
+  }
+  return closestLabel
 }
 
 function buildGeminiPrompt(
@@ -76,65 +106,42 @@ function buildGeminiPrompt(
   options: {
     faceMosaic: boolean
     creativityLevel?: 'strict' | 'balanced' | 'creative'
-    detailLevel?: 'standard' | 'high'
   }
 ): string {
   const creativity = options.creativityLevel ?? 'balanced'
-  const detail = options.detailLevel ?? 'standard'
+  // 핵심 프롬프트: 간결하게 (성공 사례 기반)
+  const preamble = hasHairstyleImage
+    ? 'Keep the person in the first image exactly as they are'
+    : 'Keep this person exactly as they are'
+  const hairInstruction = hasHairstyleImage
+    ? 'Only replace the hairstyle, using the second image as hair reference.'
+    : `Only change the hairstyle to: ${textPrompt}.`
+  const suffix = "Adapt the new hair naturally to fit the person's head shape, with realistic lighting and shadows. Maintain full likeness and photo-realistic skin texture."
 
-  const strictRules = `
-STRICT RULES — You MUST follow ALL of these:
-1. FACE: Preserve the person's face, facial features, skin tone, and face shape EXACTLY. No changes whatsoever.
-2. EXPRESSION: Keep the exact same facial expression.
-3. BACKGROUND: Keep the background IDENTICAL — same scene, colors, objects.
-4. LIGHTING: Maintain the same lighting direction, intensity, and color temperature.
-5. POSE: Keep the same head angle, body pose, and camera angle.
-6. CLOTHING: Do not change any clothing or accessories.
-7. SKIN: Do not alter skin texture, freckles, moles, or any skin details.
-8. PROPORTIONS: Maintain the same body and head proportions.
-9. IMAGE QUALITY: Output should match the input image quality and resolution.
-10. ONLY modify the hair — cut, length, volume, texture, color, and styling.`.trim()
+  let prompt = `${preamble} — same face, body, pose, outfit, and background. Do not change the framing, zoom, or face size. ${hairInstruction} ${suffix}`
 
-  let prompt: string
+  // creativity별 짧은 추가 지시
+  const creativityAddon = {
+    strict: hasHairstyleImage
+      ? ' Copy the exact cut, length, volume, parting, and color from the hair reference.'
+      : ' Follow this description precisely.',
+    balanced: '',
+    creative: hasHairstyleImage
+      ? ' You may freely adjust hair length, volume, and styling to suit the face, using the reference as inspiration for the hair only.'
+      : ' You may freely adjust hair length, volume, and styling to better suit the face.',
+  } as const
 
-  if (hasHairstyleImage) {
-    prompt = `You are given TWO images:
-- Image 1 (FIRST image): SOURCE PERSON — this is the person whose hair you will change.
-- Image 2 (SECOND image): HAIRSTYLE REFERENCE — extract ONLY the hairstyle from this image.
-
-${strictRules}
-
-Your task: Recreate Image 1 with ONLY the hairstyle replaced by the one from Image 2.`
-  } else {
-    prompt = `Edit this photo to change ONLY the person's hairstyle to: ${textPrompt}.
-
-${strictRules}
-
-Do NOT generate a new person or photo. Modify ONLY the hair in the existing image.`
-  }
-
-  // 창의성 수준
-  if (creativity === 'strict') {
-    prompt += '\n\nCREATIVITY: STRICT MODE — Copy the reference hairstyle as accurately as possible. Match exact proportions, volume, and styling. Minimize any artistic interpretation.'
-  } else if (creativity === 'creative') {
-    prompt += '\n\nCREATIVITY: CREATIVE MODE — Use the reference as inspiration. You may adapt and enhance the hairstyle to better suit the person\'s face shape, adding natural-looking variations and styling touches.'
-  }
-  // balanced일 때는 추가 지시 없음 (기본 동작)
-
-  // 디테일 수준
-  if (detail === 'high') {
-    prompt += '\n\nDETAIL: HIGH QUALITY — Render individual hair strands with fine detail. Add realistic hair texture including subtle highlights, lowlights, and natural shine. Make the hair look photorealistic with visible texture and movement.'
+  if (creativityAddon[creativity]) {
+    prompt += creativityAddon[creativity]
   }
 
   if (additionalPrompt) {
-    prompt += `\n\nADDITIONAL INSTRUCTIONS: ${additionalPrompt}`
+    prompt += ` Additional request: ${additionalPrompt}`
   }
 
   if (options.faceMosaic) {
-    prompt += '\n\nPOST-PROCESSING: Apply a mosaic/pixelation blur effect over the face area in the final result.'
+    prompt += ' Apply heavy pixelation mosaic over the entire face (eyes, nose, mouth, cheeks) so the person is completely unrecognizable. Use large, dense mosaic blocks.'
   }
-
-  prompt += '\n\nCRITICAL: The person\'s original facial features MUST be preserved EXACTLY as in the input photo. This is the highest priority rule.'
 
   return prompt
 }
@@ -177,7 +184,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let options: HairstyleOptions = { faceMosaic: false, creativityLevel: 'balanced', detailLevel: 'standard' }
+    let options: HairstyleOptions = { faceMosaic: false, creativityLevel: 'balanced' }
     if (optionsStr) {
       try {
         const parseResult = HairstyleOptionsSchema.safeParse(JSON.parse(optionsStr))
@@ -283,7 +290,10 @@ export async function POST(request: NextRequest) {
         options
       )
 
-      // contents 구성: [프롬프트텍스트, 얼굴이미지, (헤어스타일이미지)]
+      // 원본 얼굴 이미지의 aspect ratio 감지 → 출력 비율 고정
+      const faceAspectRatio = detectAspectRatio(faceResult.width, faceResult.height)
+
+      // contents 구성: [프롬프트텍스트, 얼굴이미지(base), (헤어스타일이미지)]
       const contents: Array<string | { inlineData: { data: string; mimeType: string } }> = [
         geminiPrompt,
         {
@@ -309,7 +319,11 @@ export async function POST(request: NextRequest) {
         config: {
           responseModalities: ['TEXT', 'IMAGE'],
           imageConfig: {
+            aspectRatio: faceAspectRatio,
             imageSize: '1K',
+          },
+          thinkingConfig: {
+            thinkingLevel: ThinkingLevel.HIGH,
           },
         },
       })

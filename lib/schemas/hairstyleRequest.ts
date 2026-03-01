@@ -11,8 +11,6 @@ export const HairstyleOptionsSchema = z.object({
   faceMosaic: z.boolean().default(false),
   /** 창의성 수준 */
   creativityLevel: z.enum(['strict', 'balanced', 'creative']).default('balanced'),
-  /** 디테일 수준 */
-  detailLevel: z.enum(['standard', 'high']).default('standard'),
 })
 
 export type HairstyleOptions = z.infer<typeof HairstyleOptionsSchema>

@@ -17,7 +17,6 @@ import { cn, resizeImageFile } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { useCredit } from '@/context/CreditContext'
@@ -29,9 +28,9 @@ import { useImageDropZone } from '@/hooks/useImageDropZone'
 import Link from 'next/link'
 
 const CREATIVITY_OPTIONS = [
-  { value: 'strict' as const, label: '정확히 복사' },
-  { value: 'balanced' as const, label: '균형' },
-  { value: 'creative' as const, label: '자유롭게' },
+  { value: 'strict' as const, label: '정확히 복사', description: '헤어스타일의 컷, 길이, 볼륨을 그대로 적용합니다' },
+  { value: 'balanced' as const, label: '자연스럽게', description: '헤어스타일을 얼굴형에 맞게 자연스럽게 적용합니다' },
+  { value: 'creative' as const, label: '내 얼굴에 맞게', description: '헤어스타일을 내 얼굴에 가장 어울리는 스타일로 재해석해서 적용합니다' },
 ]
 
 function AIHairstylePage() {
@@ -43,8 +42,6 @@ function AIHairstylePage() {
   const [additionalPrompt, setAdditionalPrompt] = useState('')
   const [faceMosaic, setFaceMosaic] = useState(false)
   const [creativityLevel, setCreativityLevel] = useState<'strict' | 'balanced' | 'creative'>('balanced')
-  const [detailLevel, setDetailLevel] = useState<'standard' | 'high'>('standard')
-
   // Result state
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -195,7 +192,6 @@ function AIHairstylePage() {
       formData.append('options', JSON.stringify({
         faceMosaic,
         creativityLevel,
-        detailLevel,
       }))
 
       const res = await authFetch('/api/ai/hairstyle-preview', {
@@ -220,7 +216,7 @@ function AIHairstylePage() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [faceImage, hairstyleImage, hairstyleTab, textPrompt, additionalPrompt, faceMosaic, creativityLevel, detailLevel, authFetch])
+  }, [faceImage, hairstyleImage, hairstyleTab, textPrompt, additionalPrompt, faceMosaic, creativityLevel, authFetch])
 
   // 다시 생성
   const handleReset = useCallback(() => {
@@ -506,27 +502,20 @@ function AIHairstylePage() {
                     </button>
                   ))}
                 </div>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5 text-center">
+                  {CREATIVITY_OPTIONS.find((opt) => opt.value === creativityLevel)?.description}
+                </p>
               </div>
 
-              {/* 고화질 & 모자이크 */}
+              {/* 모자이크 */}
               <label className="flex items-center justify-between cursor-pointer">
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  고화질 디테일
-                </span>
-                <Switch
-                  checked={detailLevel === 'high'}
-                  onCheckedChange={(v) => setDetailLevel(v ? 'high' : 'standard')}
-                />
-              </label>
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <Checkbox
-                  checked={faceMosaic}
-                  onCheckedChange={(v: boolean | 'indeterminate') => setFaceMosaic(!!v)}
-                />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   결과 이미지 얼굴 모자이크 처리
                 </span>
+                <Switch
+                  checked={faceMosaic}
+                  onCheckedChange={setFaceMosaic}
+                />
               </label>
 
               {/* 추가 지시사항 */}
