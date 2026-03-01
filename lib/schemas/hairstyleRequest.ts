@@ -21,6 +21,10 @@ export const HairstyleRequestSchema = z.object({
   userEmail: z.string(),
   /** 얼굴 이미지 S3 URL (필수) */
   faceImageUrl: z.string(),
+  /** 얼굴 이미지 원본 너비 (Cloud Function에서 aspect ratio 계산용) */
+  faceImageWidth: z.number().optional(),
+  /** 얼굴 이미지 원본 높이 */
+  faceImageHeight: z.number().optional(),
   /** 헤어스타일 참조 이미지 S3 URL (선택) */
   hairstyleImageUrl: z.string().optional(),
   /** 텍스트 프롬프트 (선택) */

@@ -4,7 +4,6 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { v4 as uuidv4 } from 'uuid'
 import { format } from 'date-fns'
 import sharp from 'sharp'
-import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { getDb } from '@/lib/firebase-admin'
 import { getAuthFromRequest } from '@/lib/auth-admin'
 import { handleApiError, requireAuth, requireResource, requirePermission } from '@/lib/api-error-handler'
@@ -13,8 +12,6 @@ import { validateImageBuffer } from '@/lib/file-validation'
 import { getS3Config } from '@/lib/env'
 import { getCreditSettings, deductCredits, settleAIRequest } from '@/lib/credit-operations'
 import { HairstyleOptionsSchema, type HairstyleOptions } from '@/lib/schemas/hairstyleRequest'
-
-export const maxDuration = 120 // 2분 타임아웃
 
 const COLLECTION_NAME = 'ai_hairstyle_requests'
 
@@ -42,14 +39,14 @@ async function uploadToS3(
   webpBuffer: Buffer,
   dateFolder: string,
   prefix: string,
-  options?: { resize?: boolean }
-): Promise<{ url: string; buffer: Buffer; width: number; height: number }> {
+): Promise<{ url: string; width: number; height: number }> {
   const s3Config = getS3Config()
   const s3Client = getS3Client()
 
-  const { data: finalBuffer, info } = options?.resize !== false
-    ? await sharp(webpBuffer).resize({ width: 1024, height: 1024, fit: 'inside' }).webp({ quality: 80 }).toBuffer({ resolveWithObject: true })
-    : await sharp(webpBuffer).webp({ quality: 85 }).toBuffer({ resolveWithObject: true })
+  const { data: finalBuffer, info } = await sharp(webpBuffer)
+    .resize({ width: 1024, height: 1024, fit: 'inside' })
+    .webp({ quality: 80 })
+    .toBuffer({ resolveWithObject: true })
 
   const uniqueId = uuidv4().slice(0, 8)
   const s3Key = `ai_hairstyle/${dateFolder}/${prefix}_${uniqueId}.webp`
@@ -65,101 +62,16 @@ async function uploadToS3(
 
   return {
     url: buildS3Url(s3Config.bucket, s3Config.region, s3Key),
-    buffer: finalBuffer,
     width: info.width,
     height: info.height,
   }
 }
 
-// Gemini SDK 지원 aspect ratio만 포함 (4:5, 5:4 등은 미지원)
-type GeminiAspectRatio = '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '9:16' | '16:9' | '21:9'
-
-const SUPPORTED_ASPECT_RATIOS: readonly { label: GeminiAspectRatio; value: number }[] = [
-  { label: '9:16', value: 9 / 16 },
-  { label: '2:3', value: 2 / 3 },
-  { label: '3:4', value: 3 / 4 },
-  { label: '1:1', value: 1 },
-  { label: '4:3', value: 4 / 3 },
-  { label: '3:2', value: 3 / 2 },
-  { label: '16:9', value: 16 / 9 },
-  { label: '21:9', value: 21 / 9 },
-]
-
-function detectAspectRatio(width: number, height: number): GeminiAspectRatio {
-  const ratio = width / height
-  let closestLabel: GeminiAspectRatio = SUPPORTED_ASPECT_RATIOS[0].label
-  let minDiff = Math.abs(ratio - SUPPORTED_ASPECT_RATIOS[0].value)
-  for (const ar of SUPPORTED_ASPECT_RATIOS) {
-    const diff = Math.abs(ratio - ar.value)
-    if (diff < minDiff) {
-      minDiff = diff
-      closestLabel = ar.label
-    }
-  }
-  return closestLabel
-}
-
-function buildGeminiPrompt(
-  hasHairstyleImage: boolean,
-  textPrompt: string | null,
-  additionalPrompt: string | null,
-  options: {
-    faceMosaic: boolean
-    creativityLevel?: 'strict' | 'balanced' | 'creative'
-  }
-): string {
-  const creativity = options.creativityLevel ?? 'balanced'
-  // 핵심 프롬프트: 간결하게 (성공 사례 기반)
-  const preamble = hasHairstyleImage
-    ? 'Keep the person in the first image exactly as they are'
-    : 'Keep this person exactly as they are'
-  const hairInstruction = hasHairstyleImage
-    ? 'Only replace the hairstyle, using the second image as hair reference.'
-    : `Only change the hairstyle to: ${textPrompt}.`
-  const suffix = "Adapt the new hair naturally to fit the person's head shape, with realistic lighting and shadows. Maintain full likeness and photo-realistic skin texture."
-
-  let prompt = `${preamble} — same face, body, pose, outfit, and background. Do not change the framing, zoom, or face size. ${hairInstruction} ${suffix}`
-
-  // creativity별 짧은 추가 지시
-  const creativityAddon = {
-    strict: hasHairstyleImage
-      ? ' Copy the exact cut, length, volume, parting, and color from the hair reference.'
-      : ' Follow this description precisely.',
-    balanced: '',
-    creative: hasHairstyleImage
-      ? ' You may freely adjust hair length, volume, and styling to suit the face, using the reference as inspiration for the hair only.'
-      : ' You may freely adjust hair length, volume, and styling to better suit the face.',
-  } as const
-
-  if (creativityAddon[creativity]) {
-    prompt += creativityAddon[creativity]
-  }
-
-  if (additionalPrompt) {
-    prompt += ` Additional request: ${additionalPrompt}`
-  }
-
-  if (options.faceMosaic) {
-    prompt += ' Apply heavy pixelation mosaic over the entire face (eyes, nose, mouth, cheeks) so the person is completely unrecognizable. Use large, dense mosaic blocks.'
-  }
-
-  return prompt
-}
-
-// POST: AI 헤어스타일 미리보기 요청 (동기)
+// POST: AI 헤어스타일 미리보기 요청 (비동기 — Cloud Function이 Gemini 호출)
 export async function POST(request: NextRequest) {
   try {
     const auth = await getAuthFromRequest(request)
     requireAuth(auth)
-
-    const geminiApiKey = process.env.GEMINI_API_KEY
-    if (!geminiApiKey) {
-      logger.error('[Hairstyle] GEMINI_API_KEY 환경변수 미설정')
-      return NextResponse.json(
-        { success: false, error: '서비스 설정 오류입니다. 관리자에게 문의해주세요.' },
-        { status: 500 }
-      )
-    }
 
     // FormData 파싱
     const formData = await request.formData()
@@ -253,11 +165,13 @@ export async function POST(request: NextRequest) {
     const now = Timestamp.now()
     const db = getDb()
 
-    // Firestore 문서 생성 (pending)
+    // Firestore 문서 생성 (pending) — Cloud Function이 onCreate 트리거로 처리
     const docData: Record<string, unknown> = {
       userId: auth.userId,
       userEmail: auth.email,
       faceImageUrl: faceResult.url,
+      faceImageWidth: faceResult.width,
+      faceImageHeight: faceResult.height,
       ...(hairstyleResult && { hairstyleImageUrl: hairstyleResult.url }),
       ...(textPrompt?.trim() && { prompt: textPrompt.trim() }),
       ...(additionalPrompt?.trim() && { additionalPrompt: additionalPrompt.trim() }),
@@ -279,110 +193,11 @@ export async function POST(request: NextRequest) {
       referenceId: docRef.id,
     })
 
-    // Gemini API 호출 (동기)
-    try {
-      const ai = new GoogleGenAI({ apiKey: geminiApiKey })
-
-      const geminiPrompt = buildGeminiPrompt(
-        !!hairstyleResult,
-        textPrompt?.trim() || null,
-        additionalPrompt?.trim() || null,
-        options
-      )
-
-      // 원본 얼굴 이미지의 aspect ratio 감지 → 출력 비율 고정
-      const faceAspectRatio = detectAspectRatio(faceResult.width, faceResult.height)
-
-      // contents 구성: [프롬프트텍스트, 얼굴이미지(base), (헤어스타일이미지)]
-      const contents: Array<string | { inlineData: { data: string; mimeType: string } }> = [
-        geminiPrompt,
-        {
-          inlineData: {
-            data: faceResult.buffer.toString('base64'),
-            mimeType: 'image/webp',
-          },
-        },
-      ]
-
-      if (hairstyleResult) {
-        contents.push({
-          inlineData: {
-            data: hairstyleResult.buffer.toString('base64'),
-            mimeType: 'image/webp',
-          },
-        })
-      }
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-image-preview',
-        contents,
-        config: {
-          responseModalities: ['TEXT', 'IMAGE'],
-          imageConfig: {
-            aspectRatio: faceAspectRatio,
-            imageSize: '1K',
-          },
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.HIGH,
-          },
-        },
-      })
-
-      // 결과 이미지 추출 → S3 업로드 (병렬)
-      const imageParts = response.candidates?.[0]?.content?.parts?.filter(p => p.inlineData?.data) ?? []
-
-      const resultImageUrls = await Promise.all(
-        imageParts.map(async (part) => {
-          const imgBuffer = Buffer.from(part.inlineData!.data!, 'base64')
-          const { url } = await uploadToS3(imgBuffer, dateFolder, 'result', { resize: false })
-          return url
-        })
-      )
-
-      if (resultImageUrls.length === 0) {
-        throw new Error('AI가 이미지를 생성하지 못했습니다. 다른 사진이나 설명으로 다시 시도해주세요.')
-      }
-
-      // Firestore 업데이트: success
-      await docRef.update({
-        status: 'success',
-        resultImageUrls,
-        completedAt: Timestamp.now(),
-      })
-
-      // 정산
-      await settleAIRequest(docRef.id, preChargeAmount, 'success', COLLECTION_NAME, 'ai_hairstyle_request', 'AI 헤어스타일')
-
-      return NextResponse.json({
-        success: true,
-        requestId: docRef.id,
-        faceImageUrl: faceResult.url,
-        resultImageUrls,
-      })
-    } catch (error) {
-      logger.error('[Hairstyle] Gemini API 에러:', error)
-
-      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다'
-
-      // Firestore 업데이트: failed
-      await docRef.update({
-        status: 'failed',
-        errorMessage,
-        completedAt: Timestamp.now(),
-      })
-
-      // 전액 환불
-      try {
-        await settleAIRequest(docRef.id, 0, 'failed', COLLECTION_NAME, 'ai_hairstyle_request', 'AI 헤어스타일')
-      } catch (settleErr) {
-        logger.error('[Hairstyle] 정산(환급) 실패:', settleErr)
-      }
-
-      return NextResponse.json(
-        { success: false, error: errorMessage },
-        { status: 500 }
-      )
-    }
+    // 즉시 응답 — Gemini 처리는 Cloud Function이 백그라운드로 수행
+    return NextResponse.json({
+      success: true,
+      requestId: docRef.id,
+    })
   } catch (error) {
     return handleApiError(error)
   }

@@ -25,7 +25,10 @@ import { AuthGuard } from '@/components/layout/AuthGuard'
 import { HairstyleResultGallery } from '@/components/ai/HairstyleResultGallery'
 import { HairstyleLoadingProgress } from '@/components/ai/HairstyleLoadingProgress'
 import { useImageDropZone } from '@/hooks/useImageDropZone'
+import { useHairstyleRequestStatus } from '@/hooks/useHairstyleRequests'
 import Link from 'next/link'
+
+const CLIENT_TIMEOUT_MS = 180_000 // 3분 안전장치
 
 const CREATIVITY_OPTIONS = [
   { value: 'strict' as const, label: '정확히 복사', description: '헤어스타일의 컷, 길이, 볼륨을 그대로 적용합니다' },
@@ -46,8 +49,47 @@ function AIHairstylePage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [result, setResult] = useState<{ faceImageUrl: string; resultImageUrls: string[] } | null>(null)
+  // 비동기 처리 대기 상태
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null)
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { authFetch } = useAuthFetch()
+  const pendingRequest = useHairstyleRequestStatus(pendingRequestId)
+
+  // isSubmitting(API 호출 중) 또는 pendingRequestId(Cloud Function 대기 중)
+  const isProcessing = isSubmitting || !!pendingRequestId
+
+  // onSnapshot 완료 감지
+  useEffect(() => {
+    if (!pendingRequest || !pendingRequestId) return
+
+    if (pendingRequest.status === 'success' && pendingRequest.resultImageUrls) {
+      setResult({
+        faceImageUrl: pendingRequest.faceImageUrl,
+        resultImageUrls: pendingRequest.resultImageUrls,
+      })
+      setPendingRequestId(null)
+    } else if (pendingRequest.status === 'failed') {
+      setSubmitError(pendingRequest.errorMessage ?? '이미지 생성에 실패했습니다. 다시 시도해주세요.')
+      setPendingRequestId(null)
+    }
+  }, [pendingRequest, pendingRequestId])
+
+  // pendingRequestId 설정/해제 시 타임아웃 관리
+  useEffect(() => {
+    if (pendingRequestId) {
+      pendingTimerRef.current = setTimeout(() => {
+        setSubmitError('처리 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.')
+        setPendingRequestId(null)
+      }, CLIENT_TIMEOUT_MS)
+    }
+    return () => {
+      if (pendingTimerRef.current) {
+        clearTimeout(pendingTimerRef.current)
+        pendingTimerRef.current = null
+      }
+    }
+  }, [pendingRequestId])
 
   const faceInputRef = useRef<HTMLInputElement>(null)
   const hairstyleInputRef = useRef<HTMLInputElement>(null)
@@ -157,7 +199,7 @@ function AIHairstylePage() {
     return () => document.removeEventListener('paste', handler)
   }, [processImageFile])
 
-  // 폼 제출
+  // 폼 제출 (비동기 — API는 즉시 응답, Cloud Function이 백그라운드 처리)
   const handleSubmit = useCallback(async () => {
     if (!faceImage) {
       setSubmitError('얼굴 사진을 업로드해주세요')
@@ -197,7 +239,7 @@ function AIHairstylePage() {
       const res = await authFetch('/api/ai/hairstyle-preview', {
         method: 'POST',
         body: formData,
-        timeout: 120_000,
+        timeout: 30_000,
       } as RequestInit & { timeout?: number })
 
       const data = await res.json()
@@ -206,10 +248,8 @@ function AIHairstylePage() {
         throw new Error(data.error || '요청에 실패했습니다')
       }
 
-      setResult({
-        faceImageUrl: data.faceImageUrl,
-        resultImageUrls: data.resultImageUrls,
-      })
+      // API 응답 후 Cloud Function 처리 대기
+      setPendingRequestId(data.requestId)
 
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : '요청 중 오류가 발생했습니다')
@@ -260,11 +300,11 @@ function AIHairstylePage() {
 
         {/* 결과 영역 */}
         <AnimatePresence mode="wait">
-          {isSubmitting && (
+          {isProcessing && (
             <HairstyleLoadingProgress key="loading" />
           )}
 
-          {!isSubmitting && result && (
+          {!isProcessing && result && (
             <motion.div
               key="result"
               initial={{ opacity: 0, y: 20 }}
@@ -291,8 +331,8 @@ function AIHairstylePage() {
           )}
         </AnimatePresence>
 
-        {/* 폼 영역 — 제출 중이 아닐 때만 표시 */}
-        {!isSubmitting && (
+        {/* 폼 영역 — 처리 중이 아닐 때만 표시 */}
+        {!isProcessing && (
           <>
             {/* 카드 1: 사진 업로드 */}
             <div className="p-5 sm:p-6 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
@@ -535,7 +575,7 @@ function AIHairstylePage() {
 
             {/* 카드 3: 크레딧 & 제출 */}
             <CreditFooter
-              isSubmitting={isSubmitting}
+              isSubmitting={isProcessing}
               isDisabled={!faceImage || (hairstyleTab === 'image' ? !hairstyleImage : !textPrompt.trim())}
               onSubmit={handleSubmit}
             />
