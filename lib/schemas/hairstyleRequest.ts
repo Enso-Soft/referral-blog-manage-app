@@ -9,8 +9,10 @@ import { TimestampSchema } from './post'
 export const HairstyleOptionsSchema = z.object({
   /** 결과 이미지 얼굴 모자이크 처리 */
   faceMosaic: z.boolean().default(false),
-  /** 원본 얼굴 최대한 유지 */
-  keepOriginalFace: z.boolean().default(true),
+  /** 창의성 수준 */
+  creativityLevel: z.enum(['strict', 'balanced', 'creative']).default('balanced'),
+  /** 디테일 수준 */
+  detailLevel: z.enum(['standard', 'high']).default('standard'),
 })
 
 export type HairstyleOptions = z.infer<typeof HairstyleOptionsSchema>

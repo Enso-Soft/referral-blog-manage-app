@@ -185,3 +185,89 @@ export async function downloadImage(url: string, filename?: string): Promise<voi
     window.open(url, '_blank')
   }
 }
+
+/** 여러 이미지를 다운로드 (네트워크 병렬 fetch + 순차 트리거) */
+export async function downloadAllImages(urls: string[], prefix: string = 'hairstyle'): Promise<void> {
+  const dateStr = format(new Date(), 'yyyyMMdd')
+  const blobs = await Promise.all(urls.map(async (url) => {
+    const res = await fetch(url)
+    return res.blob()
+  }))
+  for (let i = 0; i < blobs.length; i++) {
+    const blobUrl = URL.createObjectURL(blobs[i])
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = `${prefix}_${dateStr}_${i + 1}.webp`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 100)
+    if (i < blobs.length - 1) {
+      await new Promise(r => setTimeout(r, 300))
+    }
+  }
+}
+
+/** Canvas API로 Before/After 합성 이미지 생성 및 다운로드 */
+export async function createComparisonImage(
+  beforeUrl: string,
+  afterUrl: string,
+  filename?: string
+): Promise<void> {
+  const loadImg = (url: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('이미지 로드 실패'))
+      img.src = url
+    })
+
+  const [before, after] = await Promise.all([loadImg(beforeUrl), loadImg(afterUrl)])
+
+  const size = Math.max(before.width, after.width, before.height, after.height)
+  const gap = 16
+  const padding = 24
+  const labelHeight = 32
+  const canvasW = size * 2 + gap + padding * 2
+  const canvasH = size + padding * 2 + labelHeight
+
+  const canvas = document.createElement('canvas')
+  canvas.width = canvasW
+  canvas.height = canvasH
+  const ctx = canvas.getContext('2d')!
+
+  // 배경
+  ctx.fillStyle = '#18181b'
+  ctx.fillRect(0, 0, canvasW, canvasH)
+
+  // Before 이미지
+  const bx = padding + (size - before.width) / 2
+  const by = padding + (size - before.height) / 2
+  ctx.drawImage(before, bx, by, before.width, before.height)
+
+  // After 이미지
+  const ax = padding + size + gap + (size - after.width) / 2
+  const ay = padding + (size - after.height) / 2
+  ctx.drawImage(after, ax, ay, after.width, after.height)
+
+  // 라벨
+  ctx.fillStyle = '#a1a1aa'
+  ctx.font = 'bold 14px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('BEFORE', padding + size / 2, canvasH - 10)
+  ctx.fillText('AFTER', padding + size + gap + size / 2, canvasH - 10)
+
+  const dateStr = format(new Date(), 'yyyyMMdd')
+  const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'))
+  if (!blob) return
+
+  const blobUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = filename ?? `hairstyle_compare_${dateStr}.png`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 100)
+}

@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger'
 import { validateImageBuffer } from '@/lib/file-validation'
 import { getS3Config } from '@/lib/env'
 import { getCreditSettings, deductCredits, settleAIRequest } from '@/lib/credit-operations'
+import { HairstyleOptionsSchema, type HairstyleOptions } from '@/lib/schemas/hairstyleRequest'
 
 export const maxDuration = 120 // 2분 타임아웃
 
@@ -72,34 +73,68 @@ function buildGeminiPrompt(
   hasHairstyleImage: boolean,
   textPrompt: string | null,
   additionalPrompt: string | null,
-  options: { faceMosaic: boolean; keepOriginalFace: boolean }
+  options: {
+    faceMosaic: boolean
+    creativityLevel?: 'strict' | 'balanced' | 'creative'
+    detailLevel?: 'standard' | 'high'
+  }
 ): string {
+  const creativity = options.creativityLevel ?? 'balanced'
+  const detail = options.detailLevel ?? 'standard'
+
+  const strictRules = `
+STRICT RULES — You MUST follow ALL of these:
+1. FACE: Preserve the person's face, facial features, skin tone, and face shape EXACTLY. No changes whatsoever.
+2. EXPRESSION: Keep the exact same facial expression.
+3. BACKGROUND: Keep the background IDENTICAL — same scene, colors, objects.
+4. LIGHTING: Maintain the same lighting direction, intensity, and color temperature.
+5. POSE: Keep the same head angle, body pose, and camera angle.
+6. CLOTHING: Do not change any clothing or accessories.
+7. SKIN: Do not alter skin texture, freckles, moles, or any skin details.
+8. PROPORTIONS: Maintain the same body and head proportions.
+9. IMAGE QUALITY: Output should match the input image quality and resolution.
+10. ONLY modify the hair — cut, length, volume, texture, color, and styling.`.trim()
+
   let prompt: string
 
   if (hasHairstyleImage) {
-    prompt = `IMPORTANT: You are given TWO images.
-- Image 1 (FIRST image): This is the SOURCE PERSON. You MUST keep this person's face, facial features, skin tone, face shape, background, clothing, head angle, and lighting EXACTLY as they are. Do NOT change anything about this person except their hair.
-- Image 2 (SECOND image): This is the HAIRSTYLE REFERENCE ONLY. Extract ONLY the hairstyle (cut, length, volume, texture, color, styling) from this image.
+    prompt = `You are given TWO images:
+- Image 1 (FIRST image): SOURCE PERSON — this is the person whose hair you will change.
+- Image 2 (SECOND image): HAIRSTYLE REFERENCE — extract ONLY the hairstyle from this image.
 
-Your task: Take the EXACT same photo from Image 1 and ONLY replace the hairstyle with the one from Image 2. Everything else — face, expression, background, lighting, clothing, pose — must remain identical to Image 1.
-Do NOT generate a new person. Do NOT change the background. Do NOT change the face. ONLY change the hair.`
+${strictRules}
+
+Your task: Recreate Image 1 with ONLY the hairstyle replaced by the one from Image 2.`
   } else {
-    prompt = `Edit this photo of the person to change ONLY their hairstyle to: ${textPrompt}.
-Keep everything else EXACTLY the same — face, facial features, skin tone, expression, background, clothing, lighting, head angle, and pose.
-Do NOT generate a new person or a new photo. Just modify the hair in the existing photo.`
+    prompt = `Edit this photo to change ONLY the person's hairstyle to: ${textPrompt}.
+
+${strictRules}
+
+Do NOT generate a new person or photo. Modify ONLY the hair in the existing image.`
+  }
+
+  // 창의성 수준
+  if (creativity === 'strict') {
+    prompt += '\n\nCREATIVITY: STRICT MODE — Copy the reference hairstyle as accurately as possible. Match exact proportions, volume, and styling. Minimize any artistic interpretation.'
+  } else if (creativity === 'creative') {
+    prompt += '\n\nCREATIVITY: CREATIVE MODE — Use the reference as inspiration. You may adapt and enhance the hairstyle to better suit the person\'s face shape, adding natural-looking variations and styling touches.'
+  }
+  // balanced일 때는 추가 지시 없음 (기본 동작)
+
+  // 디테일 수준
+  if (detail === 'high') {
+    prompt += '\n\nDETAIL: HIGH QUALITY — Render individual hair strands with fine detail. Add realistic hair texture including subtle highlights, lowlights, and natural shine. Make the hair look photorealistic with visible texture and movement.'
   }
 
   if (additionalPrompt) {
-    prompt += `\n${additionalPrompt}`
+    prompt += `\n\nADDITIONAL INSTRUCTIONS: ${additionalPrompt}`
   }
 
   if (options.faceMosaic) {
-    prompt += '\nApply a mosaic blur effect over the face area in the final result.'
+    prompt += '\n\nPOST-PROCESSING: Apply a mosaic/pixelation blur effect over the face area in the final result.'
   }
 
-  if (options.keepOriginalFace) {
-    prompt += '\nIt is critical that the person\'s original facial features are preserved exactly as in the input photo.'
-  }
+  prompt += '\n\nCRITICAL: The person\'s original facial features MUST be preserved EXACTLY as in the input photo. This is the highest priority rule.'
 
   return prompt
 }
@@ -142,14 +177,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let options = { faceMosaic: false, keepOriginalFace: true }
-    try {
-      if (optionsStr) {
-        const parsed = JSON.parse(optionsStr)
-        options = { ...options, ...parsed }
+    let options: HairstyleOptions = { faceMosaic: false, creativityLevel: 'balanced', detailLevel: 'standard' }
+    if (optionsStr) {
+      try {
+        const parseResult = HairstyleOptionsSchema.safeParse(JSON.parse(optionsStr))
+        if (parseResult.success) {
+          options = parseResult.data
+        } else {
+          logger.warn('[Hairstyle] options 검증 실패:', parseResult.error.message)
+        }
+      } catch (err) {
+        logger.warn('[Hairstyle] options JSON 파싱 실패:', err)
       }
-    } catch {
-      // 기본값 사용
     }
 
     // 이미지 버퍼 읽기 + 검증 (업로드 전에 모두 검증)
@@ -194,8 +233,8 @@ export async function POST(request: NextRequest) {
         undefined,
         'ai_hairstyle_request'
       )
-    } catch (err: any) {
-      if (err.code === 'INSUFFICIENT_CREDIT') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'INSUFFICIENT_CREDIT') {
         return NextResponse.json(
           { success: false, error: '크레딧이 부족합니다. 충전 후 다시 시도해주세요.', code: 'INSUFFICIENT_CREDIT' },
           { status: 402 }

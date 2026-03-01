@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Scissors,
@@ -10,32 +10,40 @@ import {
   RefreshCw,
   Type,
   Image as ImageIcon,
+  ArrowRight,
+  ArrowDown,
 } from 'lucide-react'
-import { cn, resizeImageFile, formatRelativeTimeFns } from '@/lib/utils'
+import { cn, resizeImageFile } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import { useAuthFetch } from '@/hooks/useAuthFetch'
 import { useCredit } from '@/context/CreditContext'
 import { DEFAULT_CREDIT_SETTINGS } from '@/lib/schemas/credit'
 import { AuthGuard } from '@/components/layout/AuthGuard'
 import { HairstyleResultGallery } from '@/components/ai/HairstyleResultGallery'
-import { HairstyleRequestCard } from '@/components/ai/HairstyleRequestCard'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { queryKeys } from '@/lib/query-client'
-import type { HairstyleRequest } from '@/lib/schemas/hairstyleRequest'
+import { HairstyleLoadingProgress } from '@/components/ai/HairstyleLoadingProgress'
+import { useImageDropZone } from '@/hooks/useImageDropZone'
 import Link from 'next/link'
+
+const CREATIVITY_OPTIONS = [
+  { value: 'strict' as const, label: '정확히 복사' },
+  { value: 'balanced' as const, label: '균형' },
+  { value: 'creative' as const, label: '자유롭게' },
+]
 
 function AIHairstylePage() {
   // Form state
   const [faceImage, setFaceImage] = useState<{ file: File; preview: string } | null>(null)
   const [hairstyleImage, setHairstyleImage] = useState<{ file: File; preview: string } | null>(null)
-  const [hairstyleTab, setHairstyleTab] = useState<string>('image')
+  const [hairstyleTab, setHairstyleTab] = useState<'image' | 'text'>('image')
   const [textPrompt, setTextPrompt] = useState('')
   const [additionalPrompt, setAdditionalPrompt] = useState('')
   const [faceMosaic, setFaceMosaic] = useState(false)
-  const [keepOriginalFace, setKeepOriginalFace] = useState(true)
+  const [creativityLevel, setCreativityLevel] = useState<'strict' | 'balanced' | 'creative'>('balanced')
+  const [detailLevel, setDetailLevel] = useState<'standard' | 'high'>('standard')
 
   // Result state
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -43,7 +51,6 @@ function AIHairstylePage() {
   const [result, setResult] = useState<{ faceImageUrl: string; resultImageUrls: string[] } | null>(null)
 
   const { authFetch } = useAuthFetch()
-  const queryClient = useQueryClient()
 
   const faceInputRef = useRef<HTMLInputElement>(null)
   const hairstyleInputRef = useRef<HTMLInputElement>(null)
@@ -60,66 +67,98 @@ function AIHairstylePage() {
     }
   }, [])
 
-  // 이력 조회
-  const { data: historyData } = useQuery({
-    queryKey: queryKeys.hairstyleRequests.all,
-    queryFn: async () => {
-      const res = await authFetch('/api/ai/hairstyle-preview?limit=20')
-      if (!res.ok) throw new Error('이력 조회 실패')
-      const json = await res.json()
-      return json.requests as HairstyleRequest[]
-    },
-    staleTime: 30_000,
-  })
-
-  const visibleHistory = useMemo(() => historyData?.filter(r => !r.dismissed) ?? [], [historyData])
+  // 이미지 파일 처리 공통 함수
+  const processImageFile = useCallback(async (
+    file: File,
+    target: 'face' | 'hairstyle'
+  ) => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setSubmitError('jpg, png, webp 형식만 지원합니다')
+      return
+    }
+    try {
+      const resized = await resizeImageFile(file, 1024)
+      const preview = URL.createObjectURL(resized)
+      if (target === 'face') {
+        setFaceImage(prev => {
+          if (prev) URL.revokeObjectURL(prev.preview)
+          return { file: resized, preview }
+        })
+      } else {
+        setHairstyleImage(prev => {
+          if (prev) URL.revokeObjectURL(prev.preview)
+          return { file: resized, preview }
+        })
+      }
+      setSubmitError(null)
+    } catch {
+      setSubmitError('이미지 처리 중 오류가 발생했습니다')
+    }
+  }, [])
 
   // 이미지 선택 핸들러
   const handleFaceImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
-      setSubmitError('jpg, png, webp 형식만 지원합니다')
-      return
-    }
-    try {
-      const resized = await resizeImageFile(file, 1024)
-      if (faceImage) URL.revokeObjectURL(faceImage.preview)
-      setFaceImage({ file: resized, preview: URL.createObjectURL(resized) })
-      setSubmitError(null)
-    } catch {
-      setSubmitError('이미지 처리 중 오류가 발생했습니다')
-    }
+    await processImageFile(file, 'face')
     if (faceInputRef.current) faceInputRef.current.value = ''
-  }, [faceImage])
+  }, [processImageFile])
 
   const handleHairstyleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
-      setSubmitError('jpg, png, webp 형식만 지원합니다')
-      return
-    }
-    try {
-      const resized = await resizeImageFile(file, 1024)
-      if (hairstyleImage) URL.revokeObjectURL(hairstyleImage.preview)
-      setHairstyleImage({ file: resized, preview: URL.createObjectURL(resized) })
-      setSubmitError(null)
-    } catch {
-      setSubmitError('이미지 처리 중 오류가 발생했습니다')
-    }
+    await processImageFile(file, 'hairstyle')
     if (hairstyleInputRef.current) hairstyleInputRef.current.value = ''
-  }, [hairstyleImage])
+  }, [processImageFile])
 
   const removeFaceImage = useCallback(() => {
-    if (faceImage) URL.revokeObjectURL(faceImage.preview)
-    setFaceImage(null)
-  }, [faceImage])
+    setFaceImage(prev => {
+      if (prev) URL.revokeObjectURL(prev.preview)
+      return null
+    })
+  }, [])
 
   const removeHairstyleImage = useCallback(() => {
-    if (hairstyleImage) URL.revokeObjectURL(hairstyleImage.preview)
-    setHairstyleImage(null)
-  }, [hairstyleImage])
+    setHairstyleImage(prev => {
+      if (prev) URL.revokeObjectURL(prev.preview)
+      return null
+    })
+  }, [])
+
+  // Drag & Drop
+  const faceDropZone = useImageDropZone({
+    onDrop: (file) => processImageFile(file, 'face'),
+    onError: setSubmitError,
+  })
+
+  const hairstyleDropZone = useImageDropZone({
+    onDrop: (file) => processImageFile(file, 'hairstyle'),
+    onError: setSubmitError,
+  })
+
+  // 붙여넣기
+  useEffect(() => {
+    const handler = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault()
+          const file = item.getAsFile()
+          if (!file) return
+
+          // 얼굴이 비어있으면 얼굴에, 아니면 헤어스타일에
+          const target = !faceImageRef.current ? 'face' : 'hairstyle'
+          await processImageFile(file, target)
+          return
+        }
+      }
+    }
+
+    document.addEventListener('paste', handler)
+    return () => document.removeEventListener('paste', handler)
+  }, [processImageFile])
 
   // 폼 제출
   const handleSubmit = useCallback(async () => {
@@ -153,12 +192,16 @@ function AIHairstylePage() {
       if (additionalPrompt.trim()) {
         formData.append('additional_prompt', additionalPrompt.trim())
       }
-      formData.append('options', JSON.stringify({ faceMosaic, keepOriginalFace }))
+      formData.append('options', JSON.stringify({
+        faceMosaic,
+        creativityLevel,
+        detailLevel,
+      }))
 
       const res = await authFetch('/api/ai/hairstyle-preview', {
         method: 'POST',
         body: formData,
-        timeout: 120_000, // 2분 (Gemini 이미지 생성 대기)
+        timeout: 120_000,
       } as RequestInit & { timeout?: number })
 
       const data = await res.json()
@@ -172,14 +215,12 @@ function AIHairstylePage() {
         resultImageUrls: data.resultImageUrls,
       })
 
-      // 이력 갱신
-      queryClient.invalidateQueries({ queryKey: queryKeys.hairstyleRequests.all })
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : '요청 중 오류가 발생했습니다')
     } finally {
       setIsSubmitting(false)
     }
-  }, [faceImage, hairstyleImage, hairstyleTab, textPrompt, additionalPrompt, faceMosaic, keepOriginalFace, authFetch, queryClient])
+  }, [faceImage, hairstyleImage, hairstyleTab, textPrompt, additionalPrompt, faceMosaic, creativityLevel, detailLevel, authFetch])
 
   // 다시 생성
   const handleReset = useCallback(() => {
@@ -187,33 +228,8 @@ function AIHairstylePage() {
     setSubmitError(null)
   }, [])
 
-  // 이력 숨기기/삭제
-  const handleDismiss = useCallback(async (id: string) => {
-    try {
-      const res = await authFetch('/api/ai/hairstyle-preview', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      })
-      if (!res.ok) throw new Error('숨김 처리 실패')
-      queryClient.invalidateQueries({ queryKey: queryKeys.hairstyleRequests.all })
-    } catch {
-      setSubmitError('요청 숨김에 실패했습니다')
-    }
-  }, [authFetch, queryClient])
-
-  const handleDelete = useCallback(async (id: string) => {
-    try {
-      const res = await authFetch(`/api/ai/hairstyle-preview?id=${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('삭제 실패')
-      queryClient.invalidateQueries({ queryKey: queryKeys.hairstyleRequests.all })
-    } catch {
-      setSubmitError('요청 삭제에 실패했습니다')
-    }
-  }, [authFetch, queryClient])
-
   return (
-    <div className="animate-in fade-in duration-500 max-w-3xl mx-auto">
+    <div className="animate-in fade-in duration-500 max-w-4xl mx-auto">
       {/* 페이지 헤더 */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
@@ -249,21 +265,7 @@ function AIHairstylePage() {
         {/* 결과 영역 */}
         <AnimatePresence mode="wait">
           {isSubmitting && (
-            <motion.div
-              key="loading"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="p-8 rounded-2xl border border-violet-200 dark:border-violet-800/50 bg-violet-50 dark:bg-violet-950/30 text-center"
-            >
-              <Loader2 className="w-10 h-10 animate-spin text-violet-500 mx-auto mb-4" />
-              <p className="text-violet-700 dark:text-violet-300 font-medium">
-                AI가 헤어스타일을 생성하고 있어요...
-              </p>
-              <p className="text-violet-500 dark:text-violet-400 text-sm mt-2">
-                약 30초 정도 소요됩니다
-              </p>
-            </motion.div>
+            <HairstyleLoadingProgress key="loading" />
           )}
 
           {!isSubmitting && result && (
@@ -296,96 +298,33 @@ function AIHairstylePage() {
         {/* 폼 영역 — 제출 중이 아닐 때만 표시 */}
         {!isSubmitting && (
           <>
-            {/* 1. 얼굴 사진 업로드 */}
-            <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                얼굴 사진
-                <span className="text-xs text-red-500">*필수</span>
-              </label>
-              <p className="text-xs text-gray-400 dark:text-gray-500">
-                정면 또는 약간 측면의 선명한 얼굴 사진을 업로드해주세요
-              </p>
+            {/* 카드 1: 사진 업로드 */}
+            <div className="p-5 sm:p-6 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+              <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
+                <ImagePlus className="w-4 h-4 text-pink-500" />
+                사진 업로드
+                <span className="text-red-500 text-xs font-medium">*필수</span>
+              </h2>
 
-              {faceImage ? (
-                <div className="relative w-40 h-40 rounded-xl overflow-hidden group">
-                  <img
-                    src={faceImage.preview}
-                    alt="얼굴 미리보기"
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => faceInputRef.current?.click()}
-                      className="text-white hover:bg-white/20"
-                    >
-                      <RefreshCw className="w-5 h-5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={removeFaceImage}
-                      className="text-white hover:bg-white/20"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  onClick={() => faceInputRef.current?.click()}
-                  className="w-40 h-40 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-pink-400 dark:hover:border-pink-500 flex flex-col items-center justify-center text-gray-400 hover:text-pink-500 gap-2"
-                >
-                  <ImagePlus className="w-8 h-8" />
-                  <span className="text-xs">얼굴 사진 업로드</span>
-                </Button>
-              )}
+              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_60px_minmax(0,1fr)] gap-4 md:gap-0 items-stretch">
+                {/* 좌: 얼굴 사진 */}
+                <div className="flex flex-col items-center justify-center gap-3 p-5 rounded-xl bg-gray-50 dark:bg-gray-800/40">
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    얼굴 사진
+                  </label>
 
-              <input
-                ref={faceInputRef}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
-                onChange={handleFaceImageSelect}
-                className="hidden"
-              />
-            </div>
-
-            {/* 2. 헤어스타일 선택 */}
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                헤어스타일 선택
-              </label>
-
-              <Tabs value={hairstyleTab} onValueChange={setHairstyleTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="image" className="gap-2">
-                    <ImageIcon className="w-4 h-4" />
-                    이미지로 선택
-                  </TabsTrigger>
-                  <TabsTrigger value="text" className="gap-2">
-                    <Type className="w-4 h-4" />
-                    텍스트로 설명
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="image" className="mt-3">
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
-                    원하는 헤어스타일이 보이는 사진을 업로드해주세요 (사람, 일러스트 등)
-                  </p>
-                  {hairstyleImage ? (
-                    <div className="relative w-40 h-40 rounded-xl overflow-hidden group">
+                  {faceImage ? (
+                    <div className="relative w-full max-w-[220px] aspect-square rounded-xl overflow-hidden group">
                       <img
-                        src={hairstyleImage.preview}
-                        alt="헤어스타일 미리보기"
+                        src={faceImage.preview}
+                        alt="얼굴 미리보기"
                         className="w-full h-full object-cover"
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => hairstyleInputRef.current?.click()}
+                          onClick={() => faceInputRef.current?.click()}
                           className="text-white hover:bg-white/20"
                         >
                           <RefreshCw className="w-5 h-5" />
@@ -393,7 +332,7 @@ function AIHairstylePage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={removeHairstyleImage}
+                          onClick={removeFaceImage}
                           className="text-white hover:bg-white/20"
                         >
                           <Trash2 className="w-5 h-5" />
@@ -401,78 +340,211 @@ function AIHairstylePage() {
                       </div>
                     </div>
                   ) : (
-                    <Button
-                      variant="outline"
-                      onClick={() => hairstyleInputRef.current?.click()}
-                      className="w-40 h-40 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-violet-400 dark:hover:border-violet-500 flex flex-col items-center justify-center text-gray-400 hover:text-violet-500 gap-2"
+                    <div
+                      {...faceDropZone.dragProps}
+                      className="relative w-full max-w-[220px]"
                     >
-                      <ImagePlus className="w-8 h-8" />
-                      <span className="text-xs">스타일 이미지 업로드</span>
-                    </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => faceInputRef.current?.click()}
+                        className={cn(
+                          'w-full h-auto aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all',
+                          faceDropZone.isDragOver
+                            ? 'border-pink-500 bg-pink-50 dark:bg-pink-950/20 scale-105 text-pink-500'
+                            : 'border-gray-300 dark:border-gray-600 hover:border-pink-400 dark:hover:border-pink-500 text-gray-400 hover:text-pink-500'
+                        )}
+                      >
+                        <ImagePlus className="w-8 h-8" />
+                        <span className="text-xs">
+                          {faceDropZone.isDragOver ? '여기에 놓으세요' : '얼굴 사진 업로드'}
+                        </span>
+                      </Button>
+                    </div>
                   )}
+
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center">
+                    정면 또는 약간 측면의 선명한 사진
+                  </p>
+
                   <input
-                    ref={hairstyleInputRef}
+                    ref={faceInputRef}
                     type="file"
                     accept="image/jpeg,image/jpg,image/png,image/webp"
-                    onChange={handleHairstyleImageSelect}
+                    onChange={handleFaceImageSelect}
                     className="hidden"
                   />
-                </TabsContent>
+                </div>
 
-                <TabsContent value="text" className="mt-3">
-                  <Textarea
-                    value={textPrompt}
-                    onChange={(e) => setTextPrompt(e.target.value)}
-                    placeholder="예: 짧은 픽시컷, 어깨 길이 웨이브, 금발 레이어드 컷 등"
-                    rows={3}
-                    className="rounded-xl resize-none"
-                  />
-                </TabsContent>
-              </Tabs>
-            </div>
+                {/* Mobile 화살표 */}
+                <div className="flex md:hidden items-center justify-center -my-2">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-500 to-violet-500 flex items-center justify-center shadow-lg">
+                    <ArrowDown className="w-5 h-5 text-white" />
+                  </div>
+                </div>
 
-            {/* 3. 추가 지시사항 */}
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                추가 지시사항 <span className="text-xs text-gray-400 font-normal">(선택)</span>
-              </label>
-              <Textarea
-                value={additionalPrompt}
-                onChange={(e) => setAdditionalPrompt(e.target.value)}
-                placeholder="포즈, 배경, 머리 색상 변경 등 자유롭게 입력"
-                rows={2}
-                className="rounded-xl resize-none"
-              />
-            </div>
+                {/* Desktop 화살표 — 가운데 칼럼 */}
+                <div className="hidden md:flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-500 to-violet-500 flex items-center justify-center shadow-lg">
+                    <ArrowRight className="w-5 h-5 text-white" />
+                  </div>
+                </div>
 
-            {/* 4. 옵션 */}
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                옵션
-              </label>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={keepOriginalFace}
-                    onCheckedChange={(v: boolean | 'indeterminate') => setKeepOriginalFace(!!v)}
-                  />
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
-                    원본 얼굴 최대한 유지
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={faceMosaic}
-                    onCheckedChange={(v: boolean | 'indeterminate') => setFaceMosaic(!!v)}
-                  />
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
-                    결과 이미지 얼굴 모자이크 처리
-                  </span>
-                </label>
+                {/* 우: 헤어스타일 선택 */}
+                <div className="space-y-3 p-5 rounded-xl bg-gray-50 dark:bg-gray-800/40">
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    헤어스타일 선택
+                  </label>
+
+                  <Tabs value={hairstyleTab} onValueChange={(v) => setHairstyleTab(v as 'image' | 'text')}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="image" className="gap-1.5 text-xs">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        이미지
+                      </TabsTrigger>
+                      <TabsTrigger value="text" className="gap-1.5 text-xs">
+                        <Type className="w-3.5 h-3.5" />
+                        텍스트
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="image" className="mt-3">
+                      <div className="h-[320px] flex flex-col items-center justify-center gap-3">
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          원하는 헤어스타일 사진을 업로드하세요
+                        </p>
+                        {hairstyleImage ? (
+                          <div className="relative w-full max-w-[220px] aspect-square rounded-xl overflow-hidden group">
+                            <img
+                              src={hairstyleImage.preview}
+                              alt="헤어스타일 미리보기"
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => hairstyleInputRef.current?.click()}
+                                className="text-white hover:bg-white/20"
+                              >
+                                <RefreshCw className="w-5 h-5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={removeHairstyleImage}
+                                className="text-white hover:bg-white/20"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            {...hairstyleDropZone.dragProps}
+                            className="relative w-full max-w-[220px]"
+                          >
+                            <Button
+                              variant="outline"
+                              onClick={() => hairstyleInputRef.current?.click()}
+                              className={cn(
+                                'w-full h-auto aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all',
+                                hairstyleDropZone.isDragOver
+                                  ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/20 scale-105 text-violet-500'
+                                  : 'border-gray-300 dark:border-gray-600 hover:border-violet-400 dark:hover:border-violet-500 text-gray-400 hover:text-violet-500'
+                              )}
+                            >
+                              <ImagePlus className="w-8 h-8" />
+                              <span className="text-xs">
+                                {hairstyleDropZone.isDragOver ? '여기에 놓으세요' : '스타일 이미지 업로드'}
+                              </span>
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        ref={hairstyleInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleHairstyleImageSelect}
+                        className="hidden"
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="text" className="mt-3">
+                      <div className="h-[320px]">
+                        <Textarea
+                          value={textPrompt}
+                          onChange={(e) => setTextPrompt(e.target.value)}
+                          placeholder="예: 짧은 픽시컷, 어깨 길이 웨이브, 금발 레이어드 컷 등"
+                          className="rounded-xl resize-none h-full min-h-[280px]"
+                        />
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
               </div>
             </div>
 
-            {/* 5. 크레딧 & 제출 */}
+            {/* 카드 2: 옵션 */}
+            <div className="p-5 sm:p-6 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-4">
+              {/* 변환 스타일 */}
+              <div className="space-y-2">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">변환 스타일</span>
+                <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                  {CREATIVITY_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setCreativityLevel(opt.value)}
+                      className={cn(
+                        'flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                        creativityLevel === opt.value
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 고화질 & 모자이크 */}
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  고화질 디테일
+                </span>
+                <Switch
+                  checked={detailLevel === 'high'}
+                  onCheckedChange={(v) => setDetailLevel(v ? 'high' : 'standard')}
+                />
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={faceMosaic}
+                  onCheckedChange={(v: boolean | 'indeterminate') => setFaceMosaic(!!v)}
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  결과 이미지 얼굴 모자이크 처리
+                </span>
+              </label>
+
+              {/* 추가 지시사항 */}
+              <div className="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  추가 지시사항 <span className="text-gray-400 font-normal">(선택)</span>
+                </label>
+                <Textarea
+                  value={additionalPrompt}
+                  onChange={(e) => setAdditionalPrompt(e.target.value)}
+                  placeholder="포즈, 배경, 머리 색상 변경 등 자유롭게 입력"
+                  rows={2}
+                  className="rounded-xl resize-none"
+                />
+              </div>
+            </div>
+
+            {/* 카드 3: 크레딧 & 제출 */}
             <CreditFooter
               isSubmitting={isSubmitting}
               isDisabled={!faceImage || (hairstyleTab === 'image' ? !hairstyleImage : !textPrompt.trim())}
@@ -481,27 +553,6 @@ function AIHairstylePage() {
           </>
         )}
 
-        {/* 6. 이력 */}
-        {visibleHistory.length > 0 && (
-          <div className="mt-8">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Scissors className="w-4 h-4 text-pink-500" />
-              요청 이력
-            </h3>
-            <div className="space-y-3">
-              <AnimatePresence mode="popLayout">
-                {visibleHistory.map((req) => (
-                  <HairstyleRequestCard
-                    key={req.id}
-                    request={req}
-                    onDelete={handleDelete}
-                    onDismiss={handleDismiss}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

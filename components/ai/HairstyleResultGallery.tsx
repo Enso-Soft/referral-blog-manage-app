@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Download, X, ArrowRight } from 'lucide-react'
+import { Download, Images, Image as ImageIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { downloadImage } from '@/lib/utils'
+import { downloadImage, downloadAllImages, createComparisonImage } from '@/lib/utils'
+import { BeforeAfterSlider } from './BeforeAfterSlider'
 
 interface HairstyleResultGalleryProps {
   faceImageUrl: string
@@ -15,95 +16,101 @@ export function HairstyleResultGallery({
   faceImageUrl,
   resultImageUrls,
 }: HairstyleResultGalleryProps) {
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false)
+  const [isDownloadingComparison, setIsDownloadingComparison] = useState(false)
+
+  const currentResult = resultImageUrls[activeIndex]
+
+  const handleDownloadSingle = async () => {
+    if (!currentResult) return
+    await downloadImage(currentResult, `hairstyle_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}_${activeIndex + 1}.webp`)
+  }
+
+  const handleDownloadAll = async () => {
+    setIsDownloadingAll(true)
+    try {
+      await downloadAllImages(resultImageUrls)
+    } finally {
+      setIsDownloadingAll(false)
+    }
+  }
+
+  const handleDownloadComparison = async () => {
+    if (!currentResult) return
+    setIsDownloadingComparison(true)
+    try {
+      await createComparisonImage(faceImageUrl, currentResult)
+    } finally {
+      setIsDownloadingComparison(false)
+    }
+  }
 
   return (
-    <>
       <div className="space-y-4">
-        {resultImageUrls.map((resultUrl, index) => (
-          <div key={index} className="flex items-center gap-3 sm:gap-4">
-            {/* 원본 얼굴 (첫 번째만 표시) */}
-            {index === 0 && (
-              <div className="flex-shrink-0">
-                <img
-                  src={faceImageUrl}
-                  alt="원본"
-                  className="w-28 h-28 sm:w-36 sm:h-36 object-cover rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition-opacity"
-                  onClick={() => setLightboxUrl(faceImageUrl)}
-                />
-                <p className="text-xs text-center text-muted-foreground mt-1">원본</p>
-              </div>
-            )}
-
-            {/* 화살표 */}
-            {index === 0 && (
-              <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground flex-shrink-0" />
-            )}
-
-            {/* 결과 이미지 */}
-            <div className="flex-shrink-0 relative group">
-              <img
-                src={resultUrl}
-                alt={`결과 ${index + 1}`}
-                className="w-28 h-28 sm:w-36 sm:h-36 object-cover rounded-xl border-2 border-violet-300 dark:border-violet-600 cursor-pointer hover:opacity-90 transition-opacity shadow-lg"
-                onClick={() => setLightboxUrl(resultUrl)}
-              />
-              <p className="text-xs text-center text-violet-600 dark:text-violet-400 font-medium mt-1">결과</p>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => downloadImage(resultUrl, `hairstyle-${Date.now()}.webp`)}
-                className="absolute top-1 right-1 bg-black/50 hover:bg-black/70 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Download className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Lightbox */}
-      <AnimatePresence>
-        {lightboxUrl && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-            onClick={() => setLightboxUrl(null)}
-          >
-            <motion.img
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              src={lightboxUrl}
-              alt="확대 보기"
-              className="max-w-full max-h-[85vh] object-contain rounded-xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setLightboxUrl(null)}
-              className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full"
-            >
-              <X className="w-5 h-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                downloadImage(lightboxUrl, `hairstyle-${Date.now()}.webp`)
-              }}
-              className="absolute bottom-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-xl gap-2"
-            >
-              <Download className="w-4 h-4" />
-              다운로드
-            </Button>
-          </motion.div>
+        {/* BeforeAfterSlider */}
+        {currentResult && (
+          <BeforeAfterSlider
+            beforeImage={faceImageUrl}
+            afterImage={currentResult}
+            className="max-w-md mx-auto"
+          />
         )}
-      </AnimatePresence>
-    </>
+
+        {/* 다중 결과 썸네일 */}
+        {resultImageUrls.length > 1 && (
+          <div className="flex items-center justify-center gap-2">
+            {resultImageUrls.map((url, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveIndex(i)}
+                className={cn(
+                  'w-14 h-14 rounded-lg overflow-hidden border-2 transition-all',
+                  i === activeIndex
+                    ? 'border-violet-500 ring-2 ring-violet-500/30 scale-105'
+                    : 'border-gray-200 dark:border-gray-700 opacity-60 hover:opacity-100'
+                )}
+              >
+                <img src={url} alt={`결과 ${i + 1}`} className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 다운로드 툴바 */}
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadSingle}
+            className="gap-1.5 text-xs"
+          >
+            <Download className="w-3.5 h-3.5" />
+            다운로드
+          </Button>
+          {resultImageUrls.length > 1 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadAll}
+              disabled={isDownloadingAll}
+              className="gap-1.5 text-xs"
+            >
+              <Images className="w-3.5 h-3.5" />
+              전체 다운로드
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadComparison}
+            disabled={isDownloadingComparison}
+            className="gap-1.5 text-xs"
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+            비교 이미지
+          </Button>
+        </div>
+      </div>
   )
 }
