@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { detectAspectRatio, buildGeminiPrompt } from './lib/gemini'
 import { uploadToS3, downloadFromUrl } from './lib/s3'
 import { settleAIRequest } from './lib/credit'
+import { handleProcessingFailure, PreCharge } from './lib/error-handler'
 
 // Secret 정의
 const geminiApiKey = defineSecret('GEMINI_API_KEY')
@@ -28,12 +29,7 @@ interface HairstyleRequestData {
   status: string
   faceImageWidth?: number
   faceImageHeight?: number
-  preCharge?: {
-    totalAmount: number
-    sCreditCharged: number
-    eCreditCharged: number
-    transactionId: string
-  }
+  preCharge?: PreCharge
 }
 
 export const processHairstyle = onDocumentCreated(
@@ -159,32 +155,10 @@ export const processHairstyle = onDocumentCreated(
 
       console.log(`[Hairstyle] 성공: ${requestId}, 이미지 ${resultImageUrls.length}개`)
     } catch (error) {
-      console.error(`[Hairstyle] 실패: ${requestId}`, error)
-
-      const errorMessage = error instanceof Error
-        ? error.message
-        : '알 수 없는 오류가 발생했습니다'
-
-      // Firestore 업데이트: failed
-      await docRef.update({
-        status: 'failed',
-        errorMessage,
-        completedAt: admin.firestore.Timestamp.now(),
-      })
-
-      // 전액 환불
-      try {
-        await settleAIRequest(
-          requestId,
-          0,
-          'failed',
-          'ai_hairstyle_requests',
-          'ai_hairstyle_request',
-          'AI 헤어스타일'
-        )
-      } catch (settleErr) {
-        console.error(`[Hairstyle] 정산(환급) 실패: ${requestId}`, settleErr)
-      }
+      await handleProcessingFailure(
+        requestId, docRef, error,
+        'Hairstyle', 'ai_hairstyle_requests', 'ai_hairstyle_request', 'AI 헤어스타일'
+      )
     }
   }
 )

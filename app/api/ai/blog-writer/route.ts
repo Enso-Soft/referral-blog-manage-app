@@ -13,8 +13,6 @@ import { validateImageBuffer } from '@/lib/file-validation'
 import { getS3Config } from '@/lib/env'
 import { getCreditSettings, deductCredits, settleAIRequest } from '@/lib/credit-operations'
 
-const AI_API_URL = process.env.AI_API_URL || 'https://api.enso-soft.xyz/v1/ai/blog-writer'
-
 function createS3Client() {
   const config = getS3Config()
   return new S3Client({
@@ -53,7 +51,7 @@ export async function POST(request: NextRequest) {
       options = { platform: 'tistory' }
     }
 
-    // 이미지 처리: WebP 변환 → S3 업로드 (URL) + base64 (AI API용) — 병렬 처리
+    // 이미지 처리: WebP 변환 → S3 업로드 (Cloud Function이 base64 변환 담당)
     const entries = Array.from(formData.entries())
     const s3Config = getS3Config()
     const s3Client = createS3Client()
@@ -61,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const imageFiles = entries.filter(([key, value]) => key.startsWith('image_') && value instanceof File) as [string, File][]
 
-    const imageResults = await Promise.all(
+    const imageUrls = await Promise.all(
       imageFiles.map(async ([, file]) => {
         const buffer = Buffer.from(await file.arrayBuffer())
 
@@ -84,15 +82,9 @@ export async function POST(request: NextRequest) {
           })
         )
 
-        return {
-          url: `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${s3Key}`,
-          base64: `data:image/webp;base64,${webpBuffer.toString('base64')}`,
-        }
+        return `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${s3Key}`
       })
     )
-
-    const imageUrls = imageResults.map(r => r.url)
-    const imageBase64s = imageResults.map(r => r.base64)
 
     // Zod 검증
     const validatedData = CreateAIWriteRequestSchema.parse({
@@ -166,9 +158,7 @@ export async function POST(request: NextRequest) {
       referenceId: docRef.id,
     })
 
-    // AI API 호출 (base64 이미지 전달 — 백엔드 호환)
-    await callAIApi(docRef.id, { ...validatedData, images: imageBase64s }, auth.userId, userApiKey)
-
+    // Cloud Function(onCreate 트리거)이 외부 AI API 호출 담당 → 즉시 응답
     return NextResponse.json({
       success: true,
       requestId: docRef.id,
@@ -176,72 +166,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     return handleApiError(error)
-  }
-}
-
-// 외부 AI API 호출 (백그라운드)
-async function callAIApi(
-  requestId: string,
-  data: { prompt: string; images: string[]; options: unknown },
-  userId: string,
-  apiKey: string
-) {
-  const db = getDb()
-  const requestRef = db.collection('ai_write_requests').doc(requestId)
-
-  try {
-    const requestBody = {
-      requestId,
-      userId,
-      prompt: data.prompt,
-      images: data.images,
-      options: data.options,
-    }
-    logger.debug('[AI API] 요청:', AI_API_URL, `이미지 ${data.images.length}개`)
-
-    const response = await fetch(AI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': apiKey,
-      },
-      body: JSON.stringify(requestBody),
-    })
-
-    logger.debug('[AI API] 응답 status:', response.status)
-
-    const responseBody = await response.json().catch(() => ({}))
-
-    // 실패 응답: statusCode !== 200, body: {"detail": "에러 메시지"}
-    if (!response.ok) {
-      logger.error(`[AI API] 요청 거부 (${response.status})`, responseBody.detail)
-      throw new Error(responseBody.detail || `AI API 오류: ${response.status}`)
-    }
-
-    if (!responseBody.success) {
-      throw new Error(responseBody.detail || 'AI API 응답이 올바르지 않습니다')
-    }
-
-    // 요청 전달 성공 - pending 상태 유지 (Firestore 업데이트 불필요)
-  } catch (error) {
-    logger.error('[AI API] 에러:', error)
-    // 실패 시 Firestore 업데이트
-    await requestRef.update({
-      status: 'failed',
-      errorMessage: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다',
-      completedAt: Timestamp.now(),
-    })
-    // AI API 호출 실패 시 즉시 정산 (전액 환급)
-    try {
-      await settleAIRequest(requestId, 0, 'failed')
-    } catch (settleErr) {
-      logger.error('[AI API] 정산(환급) 실패:', settleErr)
-      // 정산 실패를 문서에 기록 → Admin에서 조회 가능
-      await requestRef.update({
-        'settlement.error': settleErr instanceof Error ? settleErr.message : '정산 실패',
-        'settlement.failedAt': Timestamp.now(),
-      }).catch(() => {}) // 이 업데이트 자체가 실패해도 무시
-    }
   }
 }
 
