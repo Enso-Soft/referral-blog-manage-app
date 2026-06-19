@@ -1,6 +1,6 @@
 'use client'
 
-import { PenTool, TrendingUp, Send, ImagePlus } from 'lucide-react'
+import { PenTool, MessageSquare, Send, ImagePlus } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import { ScrollReveal } from './ScrollReveal'
 import type { TranslationKey } from './translations'
@@ -22,10 +22,10 @@ const features: {
     iconBg: 'from-violet-500 to-purple-500',
   },
   {
-    icon: TrendingUp,
-    titleKey: 'features.seo.title',
-    descKey: 'features.seo.desc',
-    subKeys: ['features.seo.sub1', 'features.seo.sub2', 'features.seo.sub3', 'features.seo.sub4'],
+    icon: MessageSquare,
+    titleKey: 'features.edit.title',
+    descKey: 'features.edit.desc',
+    subKeys: ['features.edit.sub1', 'features.edit.sub2', 'features.edit.sub3'],
     gradient: 'from-fuchsia-500/10 to-pink-500/5 dark:from-fuchsia-500/5 dark:to-pink-500/5',
     iconBg: 'from-fuchsia-500 to-pink-500',
   },

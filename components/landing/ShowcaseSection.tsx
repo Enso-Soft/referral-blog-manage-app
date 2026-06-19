@@ -1,9 +1,11 @@
 'use client'
 
+import type { ComponentType } from 'react'
 import { ArrowRight, Check } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import { ScrollReveal } from './ScrollReveal'
 import { ImageSlot } from './ImageSlot'
+import { BlogPostMock, ChatEditMock, PublishMock } from './Mockups'
 import type { TranslationKey } from './translations'
 
 const STUDIO_URL = 'https://studio.ensoft.me/app'
@@ -12,23 +14,27 @@ const items: {
   titleKey: TranslationKey
   descKey: TranslationKey
   labelKey: TranslationKey
-  /** 실제 이미지 경로 (추후 /public/landing/ 에 추가 후 지정) */
+  /** 기본은 코드 목업. 실제 이미지가 생기면 src만 지정하면 자동 대체된다. */
+  Mock: ComponentType
   src?: string
 }[] = [
   {
     titleKey: 'showcase.item1.title',
     descKey: 'showcase.item1.desc',
     labelKey: 'showcase.item1.label',
+    Mock: BlogPostMock,
   },
   {
     titleKey: 'showcase.item2.title',
     descKey: 'showcase.item2.desc',
     labelKey: 'showcase.item2.label',
+    Mock: ChatEditMock,
   },
   {
     titleKey: 'showcase.item3.title',
     descKey: 'showcase.item3.desc',
     labelKey: 'showcase.item3.label',
+    Mock: PublishMock,
   },
 ]
 
@@ -84,11 +90,15 @@ export function ShowcaseSection() {
                   delay={0.1}
                   className={reversed ? 'lg:order-1' : ''}
                 >
-                  <ImageSlot
-                    src={item.src}
-                    alt={t(item.titleKey)}
-                    label={t(item.labelKey)}
-                  />
+                  {item.src ? (
+                    <ImageSlot
+                      src={item.src}
+                      alt={t(item.titleKey)}
+                      label={t(item.labelKey)}
+                    />
+                  ) : (
+                    <item.Mock />
+                  )}
                 </ScrollReveal>
               </div>
             )

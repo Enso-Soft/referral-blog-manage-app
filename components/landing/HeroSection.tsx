@@ -6,7 +6,7 @@ import { ArrowRight } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import { TypingEffect } from './TypingEffect'
 import { ScrollReveal } from './ScrollReveal'
-import { ImageSlot } from './ImageSlot'
+import { BlogPostMock } from './Mockups'
 import type { CreditConfig } from './LandingPage'
 
 const STUDIO_URL = 'https://studio.ensoft.me/app'
@@ -80,13 +80,8 @@ export function HeroSection({ creditConfig }: { creditConfig: CreditConfig }) {
         </ScrollReveal>
 
         {/* Product preview */}
-        <ScrollReveal delay={0.8} className="mt-16 max-w-4xl mx-auto">
-          <ImageSlot
-            alt={t('hero.image.label')}
-            label={t('hero.image.label')}
-            aspect="16/9"
-            priority
-          />
+        <ScrollReveal delay={0.8} className="mt-16 max-w-2xl mx-auto">
+          <BlogPostMock />
         </ScrollReveal>
       </motion.div>
     </section>
