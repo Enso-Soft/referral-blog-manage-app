@@ -1,6 +1,6 @@
 'use client'
 
-import { PenTool, ImagePlus, Scissors, BookOpen } from 'lucide-react'
+import { PenTool, TrendingUp, Send, ImagePlus } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import { ScrollReveal } from './ScrollReveal'
 import type { TranslationKey } from './translations'
@@ -17,31 +17,31 @@ const features: {
     icon: PenTool,
     titleKey: 'features.blog.title',
     descKey: 'features.blog.desc',
-    subKeys: ['features.blog.sub1', 'features.blog.sub2', 'features.blog.sub3', 'features.blog.sub4'],
+    subKeys: ['features.blog.sub1', 'features.blog.sub2', 'features.blog.sub3'],
     gradient: 'from-violet-500/10 to-purple-500/5 dark:from-violet-500/5 dark:to-purple-500/5',
     iconBg: 'from-violet-500 to-purple-500',
   },
   {
+    icon: TrendingUp,
+    titleKey: 'features.seo.title',
+    descKey: 'features.seo.desc',
+    subKeys: ['features.seo.sub1', 'features.seo.sub2', 'features.seo.sub3', 'features.seo.sub4'],
+    gradient: 'from-fuchsia-500/10 to-pink-500/5 dark:from-fuchsia-500/5 dark:to-pink-500/5',
+    iconBg: 'from-fuchsia-500 to-pink-500',
+  },
+  {
+    icon: Send,
+    titleKey: 'features.publish.title',
+    descKey: 'features.publish.desc',
+    subKeys: ['features.publish.sub1', 'features.publish.sub2', 'features.publish.sub3', 'features.publish.sub4'],
+    gradient: 'from-purple-500/10 to-fuchsia-500/5 dark:from-purple-500/5 dark:to-fuchsia-500/5',
+    iconBg: 'from-purple-500 to-fuchsia-500',
+  },
+  {
     icon: ImagePlus,
-    titleKey: 'features.thumbnail.title',
-    descKey: 'features.thumbnail.desc',
-    subKeys: ['features.thumbnail.sub1', 'features.thumbnail.sub2', 'features.thumbnail.sub3'],
-    gradient: 'from-pink-500/10 to-rose-500/5 dark:from-pink-500/5 dark:to-rose-500/5',
-    iconBg: 'from-pink-500 to-rose-500',
-  },
-  {
-    icon: Scissors,
-    titleKey: 'features.hair.title',
-    descKey: 'features.hair.desc',
-    subKeys: ['features.hair.sub1', 'features.hair.sub2', 'features.hair.sub3', 'features.hair.sub4'],
-    gradient: 'from-amber-500/10 to-orange-500/5 dark:from-amber-500/5 dark:to-orange-500/5',
-    iconBg: 'from-amber-500 to-orange-500',
-  },
-  {
-    icon: BookOpen,
-    titleKey: 'features.fairytale.title',
-    descKey: 'features.fairytale.desc',
-    subKeys: ['features.fairytale.sub1', 'features.fairytale.sub2', 'features.fairytale.sub3', 'features.fairytale.sub4'],
+    titleKey: 'features.visual.title',
+    descKey: 'features.visual.desc',
+    subKeys: ['features.visual.sub1', 'features.visual.sub2', 'features.visual.sub3'],
     gradient: 'from-emerald-500/10 to-teal-500/5 dark:from-emerald-500/5 dark:to-teal-500/5',
     iconBg: 'from-emerald-500 to-teal-500',
   },

@@ -6,6 +6,7 @@ import { ArrowRight } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import { TypingEffect } from './TypingEffect'
 import { ScrollReveal } from './ScrollReveal'
+import { ImageSlot } from './ImageSlot'
 import type { CreditConfig } from './LandingPage'
 
 const STUDIO_URL = 'https://studio.ensoft.me/app'
@@ -72,10 +73,20 @@ export function HeroSection({ creditConfig }: { creditConfig: CreditConfig }) {
             </a>
             <span className="text-sm text-muted-foreground">
               {lang === 'ko'
-                ? `가입 즉시 ${creditConfig.signupGrantAmount.toLocaleString()} 크레딧 제공`
-                : `${creditConfig.signupGrantAmount.toLocaleString()} credits on sign-up`}
+                ? `가입 즉시 ${creditConfig.signupGrantAmount.toLocaleString()} 크레딧 · 매일 ${creditConfig.checkinGrantAmount.toLocaleString()} 무료 충전 · 카드 등록 불필요`
+                : `${creditConfig.signupGrantAmount.toLocaleString()} credits on sign-up · ${creditConfig.checkinGrantAmount.toLocaleString()} free daily · no card required`}
             </span>
           </div>
+        </ScrollReveal>
+
+        {/* Product preview */}
+        <ScrollReveal delay={0.8} className="mt-16 max-w-4xl mx-auto">
+          <ImageSlot
+            alt={t('hero.image.label')}
+            label={t('hero.image.label')}
+            aspect="16/9"
+            priority
+          />
         </ScrollReveal>
       </motion.div>
     </section>

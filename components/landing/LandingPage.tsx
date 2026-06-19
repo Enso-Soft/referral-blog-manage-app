@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react'
 import { LandingHeader } from './LandingHeader'
 import { HeroSection } from './HeroSection'
+import { HowItWorksSection } from './HowItWorksSection'
 import { FeatureSection } from './FeatureSection'
+import { ShowcaseSection } from './ShowcaseSection'
+import { TrustSection } from './TrustSection'
 import { PricingSection } from './PricingSection'
 import { FaqSection } from './FaqSection'
 import { FooterSection } from './FooterSection'
@@ -36,7 +39,10 @@ export function LandingPage() {
     <div className="min-h-screen bg-background text-foreground">
       <LandingHeader />
       <HeroSection creditConfig={creditConfig} />
+      <HowItWorksSection />
       <FeatureSection />
+      <ShowcaseSection />
+      <TrustSection />
       <PricingSection creditConfig={creditConfig} />
       <FaqSection />
       <FooterSection />

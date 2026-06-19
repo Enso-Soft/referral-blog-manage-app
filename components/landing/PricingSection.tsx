@@ -162,6 +162,13 @@ export function PricingSection({ creditConfig }: { creditConfig: CreditConfig })
             </div>
           </div>
         </motion.div>
+
+        {/* Reassurance note */}
+        <ScrollReveal delay={0.1} className="text-center mt-8">
+          <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+            {t('pricing.note')}
+          </p>
+        </ScrollReveal>
       </div>
     </section>
   )
