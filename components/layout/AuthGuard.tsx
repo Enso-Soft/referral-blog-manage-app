@@ -17,9 +17,9 @@ export function AuthGuard({ children, requireAdmin = false }: AuthGuardProps) {
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        router.replace('/auth/login')
+        router.replace('/app/auth/login')
       } else if (requireAdmin && !isAdmin) {
-        router.replace('/')
+        router.replace('/app')
       }
     }
   }, [user, loading, isAdmin, requireAdmin, router])

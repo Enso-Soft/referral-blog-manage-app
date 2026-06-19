@@ -1,0 +1,15 @@
+# referral-blog 관리 프론트엔드 (Next.js SSR)
+# 포트: 호스트 127.0.0.1:8015 → 컨테이너 3000 (UFW 우회 방지 위해 127.0.0.1 바인딩 필수)
+services:
+  frontend-manage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: referral-blog-frontend-manage:latest
+    container_name: referral-blog-frontend-manage
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8015:3000"
+    # 런타임 환경변수 (.env 의 값이 컨테이너 환경에도 들어가도록)
+    env_file:
+      - .env

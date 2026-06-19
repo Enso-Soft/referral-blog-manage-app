@@ -646,7 +646,7 @@ export function WordPressPanel({ postId, post }: WordPressPanelProps) {
             설정 페이지에서 WordPress 사이트를 연결해주세요.
           </p>
           <Button
-            onClick={() => router.push('/settings')}
+            onClick={() => router.push('/app/settings')}
             className="inline-flex items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100"
           >
             <Settings className="w-4 h-4" />

@@ -29,16 +29,6 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
   }
 }
 
-// 환경변수에서 랜딩 도메인 목록 파싱 (쉼표 구분)
-// ex) LANDING_DOMAINS=ensoft.me,enso-soft.xyz,ensoft.xyz
-const LANDING_HOSTS = new Set(
-  (process.env.LANDING_DOMAINS ?? '')
-    .split(',')
-    .map(d => d.trim())
-    .filter(Boolean)
-    .flatMap(d => [d, `www.${d}`])
-)
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -60,24 +50,10 @@ export function middleware(request: NextRequest) {
     return response
   }
 
-  // API 라우트는 그대로 통과
-  if (pathname.startsWith('/api/')) {
-    return NextResponse.next()
-  }
-
-  // 도메인 기반 라우팅
-  const host = request.headers.get('host') ?? ''
-
-  // 랜딩 도메인에 해당하면 → 랜딩 페이지로 rewrite
-  if (LANDING_HOSTS.has(host)) {
-    const url = request.nextUrl.clone()
-    url.pathname = `/landing${pathname === '/' ? '' : pathname}`
-    return NextResponse.rewrite(url)
-  }
-
-  // studio.ensoft.me → 기존 스튜디오 앱 (그대로 통과)
-  // localhost → 기존 스튜디오 앱 (그대로 통과), /landing 직접 접근 가능
-
+  // 경로 기반 라우팅 (단일 도메인 studio.ensoft.me):
+  //   /       → (landing) 랜딩 페이지
+  //   /app/*  → (studio) 서비스 앱
+  // 별도 host 기반 rewrite 불필요. 전부 그대로 통과.
   return NextResponse.next()
 }
 

@@ -43,7 +43,7 @@ export default function AdminContentsPage() {
 
   useEffect(() => {
     if (!authLoading && (!user || !isAdmin)) {
-      router.push('/')
+      router.push('/app')
     }
   }, [user, isAdmin, authLoading, router])
 
@@ -166,7 +166,7 @@ export default function AdminContentsPage() {
       {/* 헤더 */}
       <div className="mb-6">
         <Link
-          href="/admin"
+          href="/app/admin"
           className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -289,7 +289,7 @@ export default function AdminContentsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
                         <Link
-                          href={`/posts/${content.id}`}
+                          href={`/app/posts/${content.id}`}
                           className="p-2 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                           title="보기"
                         >

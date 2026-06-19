@@ -34,7 +34,7 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     if (!authLoading && (!user || !isAdmin)) {
-      router.push('/')
+      router.push('/app')
     }
   }, [user, isAdmin, authLoading, router])
 
@@ -127,7 +127,7 @@ export default function AdminUsersPage() {
       {/* 헤더 */}
       <div className="mb-6">
         <Link
-          href="/admin"
+          href="/app/admin"
           className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />

@@ -8,7 +8,7 @@ import { TypingEffect } from './TypingEffect'
 import { ScrollReveal } from './ScrollReveal'
 import type { CreditConfig } from './LandingPage'
 
-const STUDIO_URL = 'https://studio.ensoft.me'
+const STUDIO_URL = 'https://studio.ensoft.me/app'
 
 export function HeroSection({ creditConfig }: { creditConfig: CreditConfig }) {
   const { t, lang } = useLanguage()

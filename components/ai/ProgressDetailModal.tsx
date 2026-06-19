@@ -244,7 +244,7 @@ export function ProgressDetailModal({
                   </span>
                   {request.resultPostId && (
                     <Link
-                      href={`/posts/${request.resultPostId}`}
+                      href={`/app/posts/${request.resultPostId}`}
                       onClick={onClose}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500 hover:bg-green-600 text-white transition-colors"
                     >

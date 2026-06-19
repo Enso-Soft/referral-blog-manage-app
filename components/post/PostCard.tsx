@@ -68,7 +68,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
 
   if (viewMode === 'list') {
     return (
-      <Link href={`/posts/${post.id}`} className="block group">
+      <Link href={`/app/posts/${post.id}`} className="block group">
         <article className="bg-card hover:bg-card/80 border border-border hover:border-border/80 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-md">
           {/* Top: Thumbnail + Info row */}
           <div className="flex flex-row items-center">
@@ -228,7 +228,7 @@ export const PostCard = memo(function PostCard({ post, onStatusChange, onTypeCha
   }
 
   return (
-    <Link href={`/posts/${post.id}`} className="block group h-full">
+    <Link href={`/app/posts/${post.id}`} className="block group h-full">
       <article className="h-full bg-card hover:bg-card/80 border border-border hover:border-border/80 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 flex flex-col">
         {/* Thumbnail Section */}
         <div className="aspect-[16/9] relative overflow-hidden bg-secondary/50">

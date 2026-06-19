@@ -542,7 +542,7 @@ function CreditFooter({
         <span>
           잔액 {totalCredit.toLocaleString()}
           {isInsufficient && (
-            <Link href="/credits" className="text-blue-500 ml-2 text-xs hover:underline">충전하기</Link>
+            <Link href="/app/credits" className="text-blue-500 ml-2 text-xs hover:underline">충전하기</Link>
           )}
         </span>
       </div>

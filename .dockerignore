@@ -1,0 +1,12 @@
+.git
+.gitignore
+node_modules
+.next
+npm-debug.log
+Dockerfile
+docker-compose.yml
+docs
+tests
+*.md
+.env.example
+# 주의: .env 는 빌드타임 환경변수 주입을 위해 제외하지 않는다 (의도적).

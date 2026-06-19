@@ -6,7 +6,7 @@ import { Moon, Sun, Monitor, Globe } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useLanguage } from './LanguageProvider'
 
-const STUDIO_URL = 'https://studio.ensoft.me'
+const STUDIO_URL = 'https://studio.ensoft.me/app'
 
 export function LandingHeader() {
   const [scrolled, setScrolled] = useState(false)

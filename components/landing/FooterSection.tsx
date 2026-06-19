@@ -4,7 +4,7 @@ import { ArrowRight } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import { ScrollReveal } from './ScrollReveal'
 
-const STUDIO_URL = 'https://studio.ensoft.me'
+const STUDIO_URL = 'https://studio.ensoft.me/app'
 
 export function FooterSection() {
   const { t } = useLanguage()

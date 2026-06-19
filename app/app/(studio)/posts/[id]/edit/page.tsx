@@ -85,7 +85,7 @@ function PostEditContent() {
       const data = await res.json()
 
       if (data.success) {
-        router.push(`/posts/${post.id}?saved=true`)
+        router.push(`/app/posts/${post.id}?saved=true`)
       } else {
         throw new Error(data.error)
       }
@@ -110,7 +110,7 @@ function PostEditContent() {
         <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
         <p className="text-gray-500">{error || '글을 찾을 수 없습니다'}</p>
         <Link
-          href="/"
+          href="/app"
           className="mt-4 text-blue-600 hover:underline flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -126,7 +126,7 @@ function PostEditContent() {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <Link
-            href={`/posts/${post.id}`}
+            href={`/app/posts/${post.id}`}
             className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-700"
           >
             <ArrowLeft className="w-4 h-4" />

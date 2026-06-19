@@ -43,7 +43,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     if (!authLoading && (!user || !isAdmin)) {
-      router.push('/')
+      router.push('/app')
     }
   }, [user, isAdmin, authLoading, router])
 
@@ -176,7 +176,7 @@ export default function AdminDashboardPage() {
       {/* 빠른 링크 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <Link
-          href="/admin/users"
+          href="/app/admin/users"
           className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm transition-all"
         >
           <div className="flex items-center gap-4">
@@ -192,7 +192,7 @@ export default function AdminDashboardPage() {
         </Link>
 
         <Link
-          href="/admin/contents"
+          href="/app/admin/contents"
           className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-green-300 dark:hover:border-green-600 hover:shadow-sm transition-all"
         >
           <div className="flex items-center gap-4">
@@ -208,7 +208,7 @@ export default function AdminDashboardPage() {
         </Link>
 
         <Link
-          href="/admin/credits"
+          href="/app/admin/credits"
           className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-amber-300 dark:hover:border-amber-600 hover:shadow-sm transition-all"
         >
           <div className="flex items-center gap-4">

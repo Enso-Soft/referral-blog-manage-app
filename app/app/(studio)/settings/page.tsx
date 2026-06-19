@@ -48,7 +48,7 @@ export default function SettingsPage() {
     if (authLoading) return
 
     if (!user) {
-      router.push('/auth/login')
+      router.push('/app/auth/login')
       return
     }
 

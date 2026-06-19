@@ -79,7 +79,7 @@ export function Header() {
   const handleSignOut = async () => {
     try {
       await signOut()
-      router.push('/auth/login')
+      router.push('/app/auth/login')
     } catch (error) {
       console.error('Sign out error:', error)
     }
@@ -99,7 +99,7 @@ export function Header() {
         {/* Left Section: Logo & Desktop Navigation */}
         <div className="flex items-center gap-8">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link href="/app" className="flex items-center gap-2 group">
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center group-hover:scale-110 transition-transform">
               <span className="font-bold text-primary text-xl">E</span>
             </div>
@@ -114,10 +114,10 @@ export function Header() {
               {/* 블로그 드롭다운 */}
               <div className="relative group">
                 <Link
-                  href="/"
+                  href="/app"
                   className={cn(
                     "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200",
-                    pathname === '/' || pathname === '/products' || pathname === '/ai-blog-write'
+                    pathname === '/app' || pathname === '/app/products' || pathname === '/app/ai-blog-write'
                       ? "bg-primary/10 text-primary dark:bg-primary/20 dark:text-white"
                       : "text-muted-foreground dark:text-slate-300 hover:text-foreground dark:hover:text-white hover:bg-secondary/80"
                   )}
@@ -127,20 +127,20 @@ export function Header() {
                   <ChevronDown className="w-3 h-3 opacity-60" />
                 </Link>
                 <div className="absolute left-0 top-full mt-1 w-40 rounded-xl border border-border/40 bg-popover/80 backdrop-blur-lg shadow-lg p-1 opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-all transform origin-top-left scale-95 group-hover:scale-100">
-                  <Link href="/" className={cn("flex items-center gap-2 px-3 py-2 text-sm rounded-lg", pathname === '/' ? "bg-secondary/50 text-foreground" : "text-foreground hover:bg-secondary/50")}>
+                  <Link href="/app" className={cn("flex items-center gap-2 px-3 py-2 text-sm rounded-lg", pathname === '/app' ? "bg-secondary/50 text-foreground" : "text-foreground hover:bg-secondary/50")}>
                     <BookOpen className="w-4 h-4" /> 글 목록
                   </Link>
-                  <Link href="/products" className={cn("flex items-center gap-2 px-3 py-2 text-sm rounded-lg", pathname === '/products' ? "bg-secondary/50 text-foreground" : "text-foreground hover:bg-secondary/50")}>
+                  <Link href="/app/products" className={cn("flex items-center gap-2 px-3 py-2 text-sm rounded-lg", pathname === '/app/products' ? "bg-secondary/50 text-foreground" : "text-foreground hover:bg-secondary/50")}>
                     <Package className="w-4 h-4" /> 제품
                   </Link>
-                  <Link href="/ai-blog-write" className={cn("flex items-center gap-2 px-3 py-2 text-sm rounded-lg", pathname === '/ai-blog-write' ? "bg-secondary/50 text-foreground" : "text-foreground hover:bg-secondary/50")}>
+                  <Link href="/app/ai-blog-write" className={cn("flex items-center gap-2 px-3 py-2 text-sm rounded-lg", pathname === '/app/ai-blog-write' ? "bg-secondary/50 text-foreground" : "text-foreground hover:bg-secondary/50")}>
                     <Sparkles className="w-4 h-4" /> AI 작성
                   </Link>
                 </div>
               </div>
-              <NavLink href="/ai-hairstyle" icon={Scissors} active={pathname === '/ai-hairstyle'}>AI 헤어스타일</NavLink>
+              <NavLink href="/app/ai-hairstyle" icon={Scissors} active={pathname === '/app/ai-hairstyle'}>AI 헤어스타일</NavLink>
               {isAdmin && (
-                <NavLink href="/admin" icon={LayoutDashboard} active={pathname === '/admin'}>관리자</NavLink>
+                <NavLink href="/app/admin" icon={LayoutDashboard} active={pathname === '/app/admin'}>관리자</NavLink>
               )}
             </nav>
           )}
@@ -180,7 +180,7 @@ export function Header() {
                     {/* Dropdown Menu */}
                     <div role="menu" className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-border/40 bg-popover/80 backdrop-blur-lg shadow-lg p-1 opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-all transform origin-top-right scale-95 group-hover:scale-100">
                       <div className="space-y-1">
-                        <Link href="/settings" role="menuitem" className="flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-lg hover:bg-secondary/50">
+                        <Link href="/app/settings" role="menuitem" className="flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-lg hover:bg-secondary/50">
                           <Settings className="w-4 h-4" /> 설정
                         </Link>
                         <Button variant="ghost" role="menuitem" onClick={handleSignOut} className="w-full justify-start px-3 py-2 h-auto text-destructive hover:bg-destructive/10 hover:text-destructive">
@@ -191,7 +191,7 @@ export function Header() {
                   </div>
                 </div>
               ) : (
-                <Link href="/auth/login" className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors shadow-lg shadow-primary/25">
+                <Link href="/app/auth/login" className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors shadow-lg shadow-primary/25">
                   로그인
                 </Link>
               )
@@ -241,28 +241,28 @@ export function Header() {
                     <div className="px-4 py-3 rounded-xl bg-secondary/50">
                       <span className="font-medium">블로그</span>
                     </div>
-                    <Link href="/" className="flex items-center justify-between px-4 py-2.5 pl-8 rounded-xl hover:bg-secondary/50">
+                    <Link href="/app" className="flex items-center justify-between px-4 py-2.5 pl-8 rounded-xl hover:bg-secondary/50">
                       <div className="flex items-center gap-2">
                         <BookOpen className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm">글 목록</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </Link>
-                    <Link href="/products" className="flex items-center justify-between px-4 py-2.5 pl-8 rounded-xl hover:bg-secondary/50">
+                    <Link href="/app/products" className="flex items-center justify-between px-4 py-2.5 pl-8 rounded-xl hover:bg-secondary/50">
                       <div className="flex items-center gap-2">
                         <Package className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm">제품</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </Link>
-                    <Link href="/ai-blog-write" className="flex items-center justify-between px-4 py-2.5 pl-8 rounded-xl hover:bg-secondary/50">
+                    <Link href="/app/ai-blog-write" className="flex items-center justify-between px-4 py-2.5 pl-8 rounded-xl hover:bg-secondary/50">
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm">AI 작성</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </Link>
-                    <Link href="/ai-hairstyle" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
+                    <Link href="/app/ai-hairstyle" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
                       <div className="flex items-center gap-2">
                         <Scissors className="w-4 h-4 text-muted-foreground" />
                         <span className="font-medium">AI 헤어스타일</span>
@@ -270,12 +270,12 @@ export function Header() {
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </Link>
                     {isAdmin && (
-                      <Link href="/admin" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
+                      <Link href="/app/admin" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
                         <span className="font-medium">관리자 대시보드</span>
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       </Link>
                     )}
-                    <Link href="/settings" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
+                    <Link href="/app/settings" className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-secondary/50">
                       <span className="font-medium">설정</span>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </Link>
@@ -293,7 +293,7 @@ export function Header() {
                 </>
               ) : (
                 <div className="grid gap-2">
-                  <Link href="/auth/login" className="flex items-center justify-center px-4 py-3 font-medium text-primary-foreground bg-primary rounded-xl">
+                  <Link href="/app/auth/login" className="flex items-center justify-center px-4 py-3 font-medium text-primary-foreground bg-primary rounded-xl">
                     로그인
                   </Link>
                 </div>

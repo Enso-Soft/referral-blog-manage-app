@@ -17,7 +17,7 @@ export function CreditPopover() {
     <div className="relative group">
       {/* 트리거 */}
       <Link
-        href="/credits"
+        href="/app/credits"
         className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg hover:bg-secondary/80 transition-colors"
       >
         <Coins className="w-4 h-4 text-amber-500" />
@@ -48,7 +48,7 @@ export function CreditPopover() {
         {/* 충전 링크 */}
         <div className="border-t p-3">
           <Link
-            href="/credits"
+            href="/app/credits"
             className="block w-full text-center text-sm font-medium py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
           >
             E&apos;Credit 충전하기

@@ -32,7 +32,7 @@ export default function CreditsPage() {
 
   // 인증 가드
   if (!loading && !user) {
-    router.replace('/auth/login')
+    router.replace('/app/auth/login')
     return null
   }
 

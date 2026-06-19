@@ -106,7 +106,7 @@ function PostDetail() {
     if (searchParams.get('saved') === 'true') {
       notify.success('저장 완료')
       // URL 정리 (쿼리 파라미터 제거)
-      window.history.replaceState({}, '', `/posts/${postId}`)
+      window.history.replaceState({}, '', `/app/posts/${postId}`)
     }
   }, [searchParams, postId])
 
@@ -395,7 +395,7 @@ function PostDetail() {
       if (data.success) {
         removePost(post.id)
         // loadMore 제거 — 목록 페이지 sentinel이 자동 처리
-        router.push('/', { scroll: false })
+        router.push('/app', { scroll: false })
       } else {
         setIsDeleting(false)
         notify.error('삭제에 실패했습니다: ' + (data.error || ''))
@@ -432,7 +432,7 @@ function PostDetail() {
           {error || '글을 찾을 수 없습니다'}
         </p>
         <Link
-          href="/"
+          href="/app"
           scroll={false}
           className="mt-4 text-blue-600 hover:underline flex items-center gap-2"
         >
@@ -448,7 +448,7 @@ function PostDetail() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => router.push('/', { scroll: false })}
+          onClick={() => router.push('/app', { scroll: false })}
           className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -582,7 +582,7 @@ function PostDetail() {
               <CopyButton content={post.content} />
               <RichCopyButton content={post.content} />
               <Link
-                href={`/posts/${post.id}/edit`}
+                href={`/app/posts/${post.id}/edit`}
                 className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium whitespace-nowrap bg-background border border-border dark:border-gray-600 hover:bg-secondary/50 rounded-xl transition-colors shadow-sm"
               >
                 <Edit className="w-4 h-4" />

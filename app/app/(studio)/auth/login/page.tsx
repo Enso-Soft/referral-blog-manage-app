@@ -33,7 +33,7 @@ export default function LoginPage() {
           body: JSON.stringify({ displayName: user.displayName || '' }),
         })
 
-        router.push('/')
+        router.push('/app')
       } catch {
         // redirect 결과 없음 - 무시
       }
@@ -95,7 +95,7 @@ export default function LoginPage() {
         body: JSON.stringify({ displayName: user.displayName || '' }),
       })
 
-      router.push('/')
+      router.push('/app')
     } catch (err: unknown) {
       settled = true
       window.removeEventListener('focus', handleWindowFocus)
