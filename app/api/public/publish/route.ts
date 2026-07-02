@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { getDb } from '@/lib/firebase-admin'
 import { createApiHandler } from '@/lib/api-handler'
 import { getOwnedDocument } from '@/lib/api-helpers'
-import { countContentChars } from '@/lib/utils'
+import { countContentChars, parseIntParam } from '@/lib/utils'
 import { SeoAnalysisSchema, ThreadsContentSchema } from '@/lib/schemas'
 
 const PublishPostSchema = z.object({
@@ -90,7 +90,7 @@ export const GET = createApiHandler({ auth: 'apiKey' }, async (request, { auth }
 
   // 단일 게시글 조회
   if (id) {
-    const { data } = await getOwnedDocument('blog_posts', id, auth, '게시글')
+    const { data } = await getOwnedDocument('blog_posts', id, auth, '게시글', false)
 
     return NextResponse.json({
       success: true,
@@ -121,8 +121,8 @@ export const GET = createApiHandler({ auth: 'apiKey' }, async (request, { auth }
   }
 
   // 목록 조회
-  const page = parseInt(searchParams.get('page') || '1', 10)
-  const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 100)
+  const page = parseIntParam(searchParams.get('page'), 1)
+  const limit = parseIntParam(searchParams.get('limit'), 20, 100)
   const lastId = searchParams.get('lastId')
   const status = searchParams.get('status')
 
@@ -185,7 +185,7 @@ export const PATCH = createApiHandler({ auth: 'apiKey' }, async (request, { auth
     )
   }
 
-  const { docRef, data: existingData } = await getOwnedDocument('blog_posts', body.id, auth, '게시글')
+  const { docRef, data: existingData } = await getOwnedDocument('blog_posts', body.id, auth, '게시글', false)
 
   const updateData: Record<string, unknown> = {
     updatedAt: Timestamp.now(),
@@ -262,7 +262,7 @@ export const DELETE = createApiHandler({ auth: 'apiKey' }, async (request, { aut
     )
   }
 
-  const { docRef } = await getOwnedDocument('blog_posts', id, auth, '게시글')
+  const { docRef } = await getOwnedDocument('blog_posts', id, auth, '게시글', false)
   await docRef.delete()
 
   return NextResponse.json({

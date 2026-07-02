@@ -4,6 +4,7 @@ import { getDb } from '@/lib/firebase-admin'
 import { requireResource, requirePermission } from '@/lib/api-error-handler'
 import { createApiHandler } from '@/lib/api-handler'
 import { TTLCache } from '@/lib/cache'
+import { parseIntParam } from '@/lib/utils'
 
 // 카테고리 통계 인메모리 캐시 (per-user, 60초 TTL)
 type CategoryStats = { name: string; count: number }[]
@@ -50,8 +51,8 @@ export const GET = createApiHandler({ auth: 'both' }, async (request: NextReques
   const productId = searchParams.get('id')
   const category = searchParams.get('category')
   const search = searchParams.get('search') || searchParams.get('keyword')
-  const perPage = parseInt(searchParams.get('limit') || searchParams.get('perPage') || '20')
-  const page = parseInt(searchParams.get('page') || '1')
+  const perPage = parseIntParam(searchParams.get('limit') || searchParams.get('perPage'), 20)
+  const page = parseIntParam(searchParams.get('page'), 1)
   const lastId = searchParams.get('lastId')
 
   // 가격 범위 필터
@@ -116,6 +117,26 @@ export const GET = createApiHandler({ auth: 'both' }, async (request: NextReques
 
     // 검색어를 단어로 분리 (array-contains는 가장 긴 단어로, 나머지는 클라이언트 필터링)
     const searchWords = searchTerm.split(/\s+/).filter(w => w.length > 0)
+
+    // 공백만 입력된 검색: queryWord가 undefined가 되어 array-contains에 undefined가 전달되면
+    // Firestore가 예외를 던지므로(500), 빈 결과로 조기 반환한다.
+    if (searchWords.length === 0) {
+      return NextResponse.json({
+        success: true,
+        products: [],
+        hasMore: false,
+        pagination: {
+          currentPage: page,
+          totalPages: 0,
+          perPage,
+          totalCount: 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+        total: 0,
+      })
+    }
+
     // 가장 긴 단어를 쿼리 키워드로 사용 (N-gram 특성상 길수록 고유하여 결과가 적음)
     const queryWord = searchWords.reduce((a, b) => a.length >= b.length ? a : b, searchWords[0])
 
@@ -223,8 +244,11 @@ export const GET = createApiHandler({ auth: 'both' }, async (request: NextReques
     const totalPages = Math.ceil(totalCount / perPage)
 
     // 커서 기반 페이지네이션 (offset 대신 사용 - 비용 효율적)
+    // minPriceNum===0(유효한 필터)을 falsy로 오판하지 않도록 null 비교 사용.
+    // 가격 필터가 걸리면 price 부등호 쿼리와 assignedAt orderBy 조합에 필요한
+    // 복합 인덱스가 없어 500이 나므로, 필터가 없을 때만 orderBy를 적용한다.
     let query = baseQuery
-    if (!minPriceNum && !maxPriceNum) {
+    if (minPriceNum === null && maxPriceNum === null) {
       query = query.orderBy('assignedAt', 'desc')
     }
     query = query.limit(perPage)

@@ -3,12 +3,13 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { CreatePostSchema, ProductSchema } from '@/lib/schemas'
 import { createApiHandler } from '@/lib/api-handler'
+import { parseIntParam } from '@/lib/utils'
 
 // GET: 포스트 목록 조회
 export const GET = createApiHandler({ auth: 'bearer' }, async (request, { auth }) => {
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
-  const limit = parseInt(searchParams.get('limit') || '20')
+  const limit = parseIntParam(searchParams.get('limit'), 20)
   const lastId = searchParams.get('lastId')
   const excludeContent = searchParams.get('excludeContent') === 'true'
   const includeCount = searchParams.get('includeCount') !== 'false' // 기본값 true

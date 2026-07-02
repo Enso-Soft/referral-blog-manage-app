@@ -48,7 +48,7 @@ export async function createCheckoutSession(
         type: 'checkouts',
         attributes: {
           product_options: {
-            redirect_url: `${origin}/credits`,
+            redirect_url: `${origin}/app/credits`,
             description: `₩1,000 = ${(1000 * rate).toLocaleString()} E'Credit`,
           },
           checkout_data: {

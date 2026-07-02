@@ -125,39 +125,48 @@ export interface WPSiteSummary {
 
 /**
  * userData에서 특정 siteId의 WPConnection을 반환.
- * - siteId로 wpSites[siteId] 조회
- * - siteId 없으면 레거시 flat 필드 폴백
- * - 둘 다 없으면 wpSites 첫 번째 사이트
- * - 못 찾으면 null
+ * - siteId를 명시하면 정확히 일치하는 사이트만 반환 (레거시 flat 필드는 '__legacy__'로만 매칭).
+ *   일치하는 사이트가 없으면 null — 절대 다른 사이트로 폴백하지 않는다 (엉뚱한 사이트에 발행/삭제 방지).
+ * - siteId를 생략(null/undefined)하면 레거시 flat 필드 → wpSites 첫 번째 사이트 순으로 폴백.
  */
 export function getWPConnectionFromUserData(
   userData: FirestoreUserData,
   siteId?: string | null
 ): (WPConnection & { siteId: string; siteUrl: string }) | null {
   const wpSites = userData.wpSites
+  const legacyConn =
+    userData.wpSiteUrl && userData.wpUsername && userData.wpAppPassword
+      ? {
+          siteUrl: userData.wpSiteUrl,
+          username: userData.wpUsername,
+          appPassword: userData.wpAppPassword,
+          siteId: '__legacy__',
+        }
+      : null
 
-  // 1. siteId로 직접 조회
-  if (siteId && wpSites?.[siteId]) {
-    const site = wpSites[siteId]
-    return {
-      siteUrl: site.siteUrl,
-      username: site.username,
-      appPassword: site.appPassword,
-      siteId,
+  // siteId 명시: 정확히 일치하는 사이트만 반환 (폴백 금지)
+  if (siteId) {
+    if (wpSites?.[siteId]) {
+      const site = wpSites[siteId]
+      return {
+        siteUrl: site.siteUrl,
+        username: site.username,
+        appPassword: site.appPassword,
+        siteId,
+      }
     }
+    // 레거시 flat 필드는 '__legacy__' siteId로 정규화되므로 그 경우에만 매칭
+    if (siteId === '__legacy__' && legacyConn) {
+      return legacyConn
+    }
+    return null
   }
 
-  // 2. 레거시 flat 필드 폴백
-  if (userData.wpSiteUrl && userData.wpUsername && userData.wpAppPassword) {
-    return {
-      siteUrl: userData.wpSiteUrl,
-      username: userData.wpUsername,
-      appPassword: userData.wpAppPassword,
-      siteId: '__legacy__',
-    }
+  // siteId 미지정: 레거시 → 첫 번째 사이트 폴백
+  if (legacyConn) {
+    return legacyConn
   }
 
-  // 3. wpSites의 첫 번째 사이트
   if (wpSites) {
     const entries = Object.entries(wpSites)
     if (entries.length > 0) {

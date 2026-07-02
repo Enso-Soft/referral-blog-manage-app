@@ -12,6 +12,7 @@ import { CreateAIWriteRequestSchema } from '@/lib/schemas/aiRequest'
 import { validateImageBuffer } from '@/lib/file-validation'
 import { getS3Config } from '@/lib/env'
 import { getCreditSettings, deductCredits, settleAIRequest } from '@/lib/credit-operations'
+import { parseIntParam } from '@/lib/utils'
 
 function createS3Client() {
   const config = getS3Config()
@@ -257,7 +258,7 @@ export async function GET(request: NextRequest) {
     requireAuth(auth)
 
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '10')
+    const limit = parseIntParam(searchParams.get('limit'), 10)
     const lastId = searchParams.get('lastId')
 
     const db = getDb()

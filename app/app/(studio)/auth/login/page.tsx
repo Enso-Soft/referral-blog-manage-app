@@ -42,7 +42,7 @@ export default function LoginPage() {
   }, [router])
 
   const openExternalBrowser = () => {
-    const cleanUrl = `${window.location.origin}/auth/login`
+    const cleanUrl = `${window.location.origin}/app/auth/login`
 
     if (browserType === 'kakaotalk') {
       window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(cleanUrl)}`
@@ -51,7 +51,7 @@ export default function LoginPage() {
 
     if (isAndroid) {
       const host = window.location.host
-      window.location.href = `intent://${host}/auth/login#Intent;scheme=https;package=com.android.chrome;end`
+      window.location.href = `intent://${host}/app/auth/login#Intent;scheme=https;package=com.android.chrome;end`
       return
     }
 

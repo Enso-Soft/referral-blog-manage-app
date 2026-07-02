@@ -7,6 +7,8 @@ import { verifyWebhookSignature, verifyOrder } from '@/lib/lemon-squeezy'
 
 // POST: Lemon Squeezy 웹훅 (결제 확인 → E'Credit 충전)
 export async function POST(request: NextRequest) {
+  // 이번 요청에서 이벤트 문서를 선점했는지 추적 (예기치 못한 예외 시 클레임 해제용)
+  let claimedEventRef: FirebaseFirestore.DocumentReference | null = null
   try {
     const rawBody = await request.text()
     const signature = request.headers.get('x-signature') || ''
@@ -35,12 +37,20 @@ export async function POST(request: NextRequest) {
 
     const db = getDb()
 
-    // 멱등성: 이미 처리된 이벤트인지 확인
+    // 멱등성: 트랜잭션으로 이벤트를 원자적으로 선점 (동시 중복 전달 시 이중 충전/차감 방지)
     const eventRef = db.collection('lemon_squeezy_events').doc(String(eventId))
-    const eventDoc = await eventRef.get()
-    if (eventDoc.exists) {
+    const claimed = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(eventRef)
+      if (snap.exists) return false
+      tx.set(eventRef, { eventName, status: 'processing', claimedAt: Timestamp.now() })
+      return true
+    })
+    if (!claimed) {
       return NextResponse.json({ success: true, message: '이미 처리된 이벤트입니다' })
     }
+    // 이후 처리 중 예기치 못한 예외가 나면 클레임을 지워 웹훅 재시도가 가능하도록 한다.
+    // (검증 실패로 인한 명시적 error 응답 경로는 eventRef.set(...)으로 덮어써 재시도를 막는다.)
+    claimedEventRef = eventRef
 
     // order_created / order_refunded 이벤트만 처리
     if (eventName !== 'order_created' && eventName !== 'order_refunded') {
@@ -191,10 +201,21 @@ export async function POST(request: NextRequest) {
 
       logger.info(`[Webhook] E'Credit ${creditAmount} 충전 완료 (userId: ${userId})`)
     } else if (eventName === 'order_refunded') {
-      // 환불: E'Credit 차감 (잔액 부족 시 가능한 만큼만)
+      // 환불: 원래 충전(order_created) 시 실제 지급된 E'Credit 만큼 차감한다.
+      // 현재 creditPerWon 설정으로 재계산하면 그 사이 설정이 바뀐 경우 과소/과대 차감이 발생하므로,
+      // 원 이벤트에 기록된 creditAmount를 우선 사용하고, 없을 때만(레거시) 재계산 값으로 폴백한다.
+      const originalCreatedEvent = await db
+        .collection('lemon_squeezy_events')
+        .doc(`order_created_${rawEventId}`)
+        .get()
+      const grantedAmount =
+        originalCreatedEvent.exists && typeof originalCreatedEvent.data()?.creditAmount === 'number'
+          ? (originalCreatedEvent.data()!.creditAmount as number)
+          : creditAmount
+
       const userData = userDoc.data()!
       const eCredit = userData.eCredit ?? 0
-      const deductAmount = Math.min(creditAmount, eCredit)
+      const deductAmount = Math.min(grantedAmount, eCredit)
 
       if (deductAmount > 0) {
         // adminDeductCredits로 E'Credit만 정확히 차감 (S'Credit 보호)
@@ -202,7 +223,7 @@ export async function POST(request: NextRequest) {
           userId,
           0,
           deductAmount,
-          `${creditAmount.toLocaleString()} E'Credit 환불 차감`,
+          `${grantedAmount.toLocaleString()} E'Credit 환불 차감`,
           'system_webhook'
         )
 
@@ -211,9 +232,9 @@ export async function POST(request: NextRequest) {
           userId,
           orderTotal,
           creditPerWon: creditSettings.creditPerWon,
-          creditAmount,
+          creditAmount: grantedAmount,
           deductedAmount: deductAmount,
-          shortfall: creditAmount - deductAmount,
+          shortfall: grantedAmount - deductAmount,
           transactionId: result.transactionId,
           payload: payload.data,
           processedAt: Timestamp.now(),
@@ -227,9 +248,9 @@ export async function POST(request: NextRequest) {
           userId,
           orderTotal,
           creditPerWon: creditSettings.creditPerWon,
-          creditAmount,
+          creditAmount: grantedAmount,
           deductedAmount: 0,
-          shortfall: creditAmount,
+          shortfall: grantedAmount,
           payload: payload.data,
           processedAt: Timestamp.now(),
           error: '잔액 부족으로 차감 불가',
@@ -242,6 +263,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     logger.error('[Webhook] Lemon Squeezy 처리 에러:', error)
+    // 예기치 못한 예외(예: verifyOrder 네트워크 오류)로 미처리 상태면 클레임을 해제해 재시도를 허용한다.
+    if (claimedEventRef) {
+      await claimedEventRef.delete().catch(() => {})
+    }
     return NextResponse.json(
       { success: false, error: '웹훅 처리 실패' },
       { status: 500 }

@@ -49,6 +49,13 @@ export async function verifyIdToken(token: string) {
 // 사용자 데이터 캐시 (역할 + API 키) — TTLCache 활용
 const userDataCache = new TTLCache<{ role: 'admin' | 'user'; apiKey?: string }>(5 * 60 * 1000, 1000, 100)
 
+/**
+ * 사용자 캐시 무효화. API 키/역할이 변경되면 호출해 stale 인증 데이터를 제거한다.
+ */
+export function invalidateUserDataCache(userId: string) {
+  userDataCache.delete(userId)
+}
+
 async function getCachedUserData(userId: string): Promise<{ role: 'admin' | 'user'; apiKey?: string }> {
   const cached = userDataCache.get(userId)
   if (cached) return cached

@@ -23,13 +23,15 @@ interface AuthInfo {
  * @param docId 문서 ID
  * @param auth 인증 정보 (userId, isAdmin)
  * @param resourceLabel 에러 메시지에 사용할 리소스 이름 (예: '게시글', '요청')
+ * @param allowAdmin 관리자 소유권 우회 허용 여부 (기본 true). 공개 API(X-API-Key)에서는 false로 넘겨 본인 소유 문서만 접근하도록 제한한다.
  * @returns { docRef, data, doc }
  */
 export async function getOwnedDocument(
   collectionName: string,
   docId: string,
   auth: AuthInfo,
-  resourceLabel = '리소스'
+  resourceLabel = '리소스',
+  allowAdmin = true
 ) {
   const db = getDb()
   const docRef = db.collection(collectionName).doc(docId)
@@ -39,7 +41,7 @@ export async function getOwnedDocument(
 
   const data = doc.data()!
   requirePermission(
-    auth.isAdmin || data.userId === auth.userId,
+    (allowAdmin && auth.isAdmin) || data.userId === auth.userId,
     `이 ${resourceLabel}에 대한 권한이 없습니다`
   )
 

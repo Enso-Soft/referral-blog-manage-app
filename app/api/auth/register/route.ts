@@ -33,42 +33,47 @@ export async function POST(request: NextRequest) {
     const db = getDb()
     const userRef = db.collection('users').doc(decodedToken.uid)
 
-    // 이미 존재하는지 확인
-    const existingDoc = await userRef.get()
-    if (existingDoc.exists) {
-      return NextResponse.json({ success: true, message: '이미 등록됨' })
-    }
-
     const settings = await getCreditSettings()
     const apiKey = generateApiKey()
     const now = Timestamp.now()
 
-    // users 문서 생성 + 크레딧 초기화 + signup_grant 로그 (배치 쓰기)
-    const batch = db.batch()
-    const txnRef = db.collection('credit_transactions').doc()
+    // 존재 확인 + 문서 생성 + signup_grant 로그를 트랜잭션으로 원자 처리한다.
+    // (check-then-write 배치는 동시 요청 시 둘 다 통과해 가입 크레딧이 이중 지급될 수 있음)
+    const created = await db.runTransaction(async (transaction) => {
+      const existingDoc = await transaction.get(userRef)
+      if (existingDoc.exists) {
+        return false
+      }
 
-    batch.set(userRef, {
-      email: decodedToken.email,
-      displayName: displayName || null,
-      role: 'user',
-      apiKey,
-      sCredit: settings.signupGrantAmount,
-      eCredit: 0,
-      createdAt: now,
+      const txnRef = db.collection('credit_transactions').doc()
+
+      transaction.set(userRef, {
+        email: decodedToken.email,
+        displayName: displayName || null,
+        role: 'user',
+        apiKey,
+        sCredit: settings.signupGrantAmount,
+        eCredit: 0,
+        createdAt: now,
+      })
+
+      transaction.set(txnRef, {
+        userId: decodedToken.uid,
+        type: 'credit',
+        sCreditDelta: settings.signupGrantAmount,
+        eCreditDelta: 0,
+        sCreditAfter: settings.signupGrantAmount,
+        eCreditAfter: 0,
+        description: `회원가입 ${settings.signupGrantAmount.toLocaleString()} S'Credit 지급`,
+        createdAt: now,
+      })
+
+      return true
     })
 
-    batch.set(txnRef, {
-      userId: decodedToken.uid,
-      type: 'credit',
-      sCreditDelta: settings.signupGrantAmount,
-      eCreditDelta: 0,
-      sCreditAfter: settings.signupGrantAmount,
-      eCreditAfter: 0,
-      description: `회원가입 ${settings.signupGrantAmount.toLocaleString()} S'Credit 지급`,
-      createdAt: now,
-    })
-
-    await batch.commit()
+    if (!created) {
+      return NextResponse.json({ success: true, message: '이미 등록됨' })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

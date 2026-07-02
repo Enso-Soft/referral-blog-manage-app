@@ -5,6 +5,7 @@ import { createApiHandler } from '@/lib/api-handler'
 import { getOwnedDocument } from '@/lib/api-helpers'
 import { settleAIRequest } from '@/lib/credit-operations'
 import { logger } from '@/lib/logger'
+import { parseIntParam } from '@/lib/utils'
 
 // GET: AI 글 작성 요청 조회 (단건 또는 목록)
 export const GET = createApiHandler({ auth: 'apiKey' }, async (request: NextRequest, { auth }) => {
@@ -14,7 +15,7 @@ export const GET = createApiHandler({ auth: 'apiKey' }, async (request: NextRequ
 
   // 단건 조회
   if (id) {
-    const { data, doc } = await getOwnedDocument('ai_write_requests', id, auth!, '요청')
+    const { data, doc } = await getOwnedDocument('ai_write_requests', id, auth!, '요청', false)
 
     return NextResponse.json({
       success: true,
@@ -37,8 +38,8 @@ export const GET = createApiHandler({ auth: 'apiKey' }, async (request: NextRequ
   }
 
   // 목록 조회
-  const page = parseInt(searchParams.get('page') || '1', 10)
-  const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 100)
+  const page = parseIntParam(searchParams.get('page'), 1)
+  const limit = parseIntParam(searchParams.get('limit'), 20, 100)
   const lastId = searchParams.get('lastId')
   const status = searchParams.get('status')
 
@@ -104,7 +105,7 @@ export const PATCH = createApiHandler({ auth: 'apiKey' }, async (request: NextRe
     )
   }
 
-  const { docRef, data: existingData } = await getOwnedDocument('ai_write_requests', body.id, auth!, '요청')
+  const { docRef, data: existingData } = await getOwnedDocument('ai_write_requests', body.id, auth!, '요청', false)
 
   // 업데이트 가능한 필드만 추출
   const updateData: Record<string, any> = {}
@@ -150,7 +151,14 @@ export const PATCH = createApiHandler({ auth: 'apiKey' }, async (request: NextRe
     !existingData.settlement?.settled
   ) {
     try {
-      const actualCost = body.actualCost ?? existingData.preCharge.totalAmount
+      // actualCost는 호출자(외부 AI 서비스)가 보내지만 신뢰할 수 없으므로 검증한다.
+      // 음수/비숫자 값이 그대로 정산에 들어가면 임의 크레딧 환급(발행)이 가능하므로,
+      // 유한한 0 이상 숫자가 아니면 선결제 금액으로 폴백한다.
+      const rawActualCost = Number(body.actualCost)
+      const actualCost =
+        body.actualCost !== undefined && Number.isFinite(rawActualCost) && rawActualCost >= 0
+          ? rawActualCost
+          : existingData.preCharge.totalAmount
       await settleAIRequest(body.id, actualCost, body.status)
     } catch (settleErr) {
       logger.error(`[AI Requests] 크레딧 정산 실패 (requestId: ${body.id}):`, settleErr)
@@ -192,7 +200,7 @@ export const DELETE = createApiHandler({ auth: 'apiKey' }, async (request: NextR
     )
   }
 
-  const { docRef } = await getOwnedDocument('ai_write_requests', id, auth!, '요청')
+  const { docRef } = await getOwnedDocument('ai_write_requests', id, auth!, '요청', false)
 
   await docRef.delete()
 

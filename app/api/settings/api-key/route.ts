@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import { getDb } from '@/lib/firebase-admin'
 import { createApiHandler } from '@/lib/api-handler'
 import { hashApiKey } from '@/lib/crypto'
+import { invalidateUserDataCache } from '@/lib/auth-admin'
 
 // API 키 생성 함수
 function generateApiKey(): string {
@@ -22,6 +23,9 @@ export const POST = createApiHandler({ auth: 'bearer' }, async (request: NextReq
     apiKeyHash: hashApiKey(newApiKey),
     apiKeyCreatedAt: new Date(),
   })
+
+  // 캐시된 stale apiKey가 Bearer 인증 라우트에서 최대 5분간 서빙되는 것을 방지
+  invalidateUserDataCache(auth!.userId)
 
   return NextResponse.json({ success: true, apiKey: newApiKey })
 })

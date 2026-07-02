@@ -22,6 +22,21 @@ export const POST = createApiHandler({ auth: 'bearer', admin: true }, async (req
     )
   }
 
+  // 부호 혼합 방지: S/E 한쪽은 지급(+)인데 다른 쪽은 차감(-)이면
+  // 아래 isDeduct 분기에서 Math.abs가 적용돼 지급 의도가 차감으로 뒤집힌다.
+  if (sAmount > 0 && eAmount < 0) {
+    return NextResponse.json(
+      { success: false, error: '지급과 차감을 한 번에 처리할 수 없습니다. S/E 부호를 통일해주세요.' },
+      { status: 400 }
+    )
+  }
+  if (sAmount < 0 && eAmount > 0) {
+    return NextResponse.json(
+      { success: false, error: '지급과 차감을 한 번에 처리할 수 없습니다. S/E 부호를 통일해주세요.' },
+      { status: 400 }
+    )
+  }
+
   // 양수: 지급, 음수: 차감
   const isDeduct = sAmount < 0 || eAmount < 0
 

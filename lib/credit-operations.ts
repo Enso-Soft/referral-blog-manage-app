@@ -1,5 +1,5 @@
 import 'server-only'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '@/lib/firebase-admin'
 import { TTLCache } from '@/lib/cache'
 import { logger } from '@/lib/logger'
@@ -360,28 +360,32 @@ export async function settleAIRequest(
 ): Promise<void> {
   const db = getDb()
   const requestRef = db.collection(collectionName).doc(requestId)
-  const requestDoc = await requestRef.get()
 
-  if (!requestDoc.exists) {
-    logger.error(`[Credit] AI 요청 ${requestId}을 찾을 수 없습니다`)
+  // 원자적 정산 클레임: 동시 호출 중 하나만 정산을 수행하도록 트랜잭션으로 선점한다.
+  // (plain get 기반 멱등성 체크는 동시 호출 시 둘 다 통과해 이중 환급/차감이 발생할 수 있음)
+  const claim = await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(requestRef)
+    if (!snap.exists) return null
+    const d = snap.data()!
+    if (!d.preCharge) return null
+    // 이미 정산됐거나 다른 호출이 선점 중이면 스킵
+    if (d.settlement?.settled || d.settlement?.claimed) return null
+    transaction.update(requestRef, { 'settlement.claimed': true })
+    return d
+  })
+
+  if (!claim) {
+    if (!(await requestRef.get()).exists) {
+      logger.error(`[Credit] AI 요청 ${requestId}을 찾을 수 없습니다`)
+    }
     return
   }
 
-  const data = requestDoc.data()!
-
-  // 선결제 정보 없으면 스킵
-  if (!data.preCharge) {
-    return
-  }
-
-  // 이미 정산됐으면 스킵 (멱등성)
-  if (data.settlement?.settled) {
-    return
-  }
-
+  const data = claim
   const { totalAmount, sCreditCharged, eCreditCharged, transactionId: preChargeTxnId } = data.preCharge
   const userId = data.userId
 
+  try {
   if (status === 'failed') {
     // 전액 환급
     const result = await refundCredits(
@@ -523,6 +527,11 @@ export async function settleAIRequest(
       settlementTransactionId: result.transactionId,
     },
   })
+  } catch (err) {
+    // 정산 실패 시 클레임을 해제해 재시도가 정산할 수 있도록 한다.
+    await requestRef.update({ 'settlement.claimed': FieldValue.delete() }).catch(() => {})
+    throw err
+  }
 }
 
 /**

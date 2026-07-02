@@ -65,6 +65,21 @@ export function countContentChars(html: string): number {
     return html.replace(/<[^>]*>/g, '').replace(/\s+/g, '').length
 }
 
+/**
+ * 쿼리스트링 등에서 받은 페이지네이션 정수 파라미터를 안전하게 파싱.
+ * NaN/비정수/양수 아님 → fallback. 선택적으로 [1, max]로 클램프.
+ * (parseInt 결과를 그대로 Firestore query.limit()에 넘기면 NaN에서 예외가 발생하므로 방어)
+ */
+export function parseIntParam(
+    value: string | null | undefined,
+    fallback: number,
+    max?: number
+): number {
+    const parsed = parseInt(value ?? '', 10)
+    if (!Number.isFinite(parsed) || parsed < 1) return fallback
+    return max !== undefined ? Math.min(parsed, max) : parsed
+}
+
 export { format, formatDistanceToNow, addHours } from 'date-fns'
 export { ko as koLocale } from 'date-fns/locale'
 

@@ -12,6 +12,7 @@ import { validateImageBuffer } from '@/lib/file-validation'
 import { getS3Config } from '@/lib/env'
 import { getCreditSettings, deductCredits, settleAIRequest } from '@/lib/credit-operations'
 import { HairstyleOptionsSchema, type HairstyleOptions } from '@/lib/schemas/hairstyleRequest'
+import { parseIntParam } from '@/lib/utils'
 
 const COLLECTION_NAME = 'ai_hairstyle_requests'
 
@@ -289,7 +290,7 @@ export async function GET(request: NextRequest) {
     requireAuth(auth)
 
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '10')
+    const limit = parseIntParam(searchParams.get('limit'), 10)
     const lastId = searchParams.get('lastId')
 
     const db = getDb()
