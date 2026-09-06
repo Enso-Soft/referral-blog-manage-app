@@ -5,11 +5,31 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      secrets:
+        - build_env
     image: referral-blog-frontend-manage:latest
     container_name: referral-blog-frontend-manage
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     ports:
       - "127.0.0.1:8015:3000"
     # 런타임 환경변수 (.env 의 값이 컨테이너 환경에도 들어가도록)
     env_file:
       - .env
+
+secrets:
+  build_env:
+    file: .env
