@@ -16,6 +16,12 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
+rollback() {
+    log "Restoring the previous image..."
+    docker tag referral-blog-frontend-manage:previous referral-blog-frontend-manage:latest
+    docker compose up -d --no-deps --no-build --wait --wait-timeout 60 frontend-manage
+}
+
 cd "$DEPLOY_DIR"
 
 log "=== 관리 프론트엔드 배포 시작 ==="
@@ -43,7 +49,10 @@ docker compose build --builder enso-maintenance frontend-manage 2>&1 | tee -a "$
 
 # 3. 컨테이너 교체
 log "컨테이너 교체..."
-docker compose up -d --no-deps --no-build frontend-manage 2>&1 | tee -a "$LOG_FILE"
+if ! docker compose up -d --no-deps --no-build frontend-manage 2>&1 | tee -a "$LOG_FILE"; then
+    rollback
+    exit 1
+fi
 
 # 4. 헬스체크 (SSR cold start 고려해 넉넉히)
 log "헬스체크 대기..."
@@ -59,7 +68,5 @@ done
 
 log "ERROR: 헬스체크 실패! 컨테이너 로그 확인 필요."
 docker compose logs --tail=50 frontend-manage 2>&1 | tee -a "$LOG_FILE"
-log "Restoring the previous image..."
-docker tag referral-blog-frontend-manage:previous referral-blog-frontend-manage:latest
-docker compose up -d --no-deps --no-build frontend-manage
+rollback
 exit 1
