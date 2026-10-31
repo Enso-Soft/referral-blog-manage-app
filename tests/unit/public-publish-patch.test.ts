@@ -59,3 +59,50 @@ describe('Public post PATCH metadata', () => {
     expect(update).not.toHaveBeenCalled()
   })
 })
+
+describe('Public post PATCH addPublishedUrl', () => {
+  const update = vi.fn()
+  const setExisting = (data: Record<string, unknown>) =>
+    vi.mocked(getOwnedDocument).mockResolvedValue({ docRef: { update }, data: { title: 't', content: '<p>c</p>', status: 'draft', ...data } } as never)
+  beforeEach(() => { vi.clearAllMocks(); update.mockResolvedValue(undefined) })
+  const patch = (body: unknown) => PATCH(new Request('https://studio.example.test/api/public/publish', {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }) as never, {} as never)
+  const tistory = 'https://blog.tistory.com/141'
+
+  it('appends to existing addresses and keeps the primary address', async () => {
+    setExisting({ publishedUrls: ['https://wp.example.test/a'], publishedUrl: 'https://wp.example.test/a' })
+    const response = await patch({ id: 'p1', addPublishedUrl: tistory, status: 'published' })
+    const written = update.mock.calls[0][0]
+    expect(written.publishedUrls).toEqual(['https://wp.example.test/a', tistory])
+    expect(written).not.toHaveProperty('publishedUrl')
+    expect(written.status).toBe('published')
+    const json = await response.json()
+    expect(json.data.publishedUrls).toEqual(['https://wp.example.test/a', tistory])
+    expect(json.data.publishedUrl).toBe('https://wp.example.test/a')
+  })
+
+  it('sets the primary address when none exists', async () => {
+    setExisting({})
+    await patch({ id: 'p1', addPublishedUrl: tistory })
+    expect(update.mock.calls[0][0]).toMatchObject({ publishedUrls: [tistory], publishedUrl: tistory })
+  })
+
+  it('does not duplicate an address that is already listed', async () => {
+    setExisting({ publishedUrls: [tistory], publishedUrl: tistory })
+    await patch({ id: 'p1', addPublishedUrl: tistory })
+    expect(update.mock.calls[0][0].publishedUrls).toEqual([tistory])
+  })
+
+  it('seeds the list from a legacy single publishedUrl', async () => {
+    setExisting({ publishedUrl: 'https://legacy.example.test/x' })
+    await patch({ id: 'p1', addPublishedUrl: tistory })
+    expect(update.mock.calls[0][0].publishedUrls).toEqual(['https://legacy.example.test/x', tistory])
+  })
+
+  it.each(['not-a-url', 'javascript:alert(1)', 42, ''])('rejects invalid addPublishedUrl before writing: %j', async value => {
+    setExisting({})
+    await expect(patch({ id: 'p1', addPublishedUrl: value, status: 'published' })).rejects.toThrow()
+    expect(update).not.toHaveBeenCalled()
+  })
+})

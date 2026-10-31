@@ -33,6 +33,18 @@ const UpdateMetadataSchema = z.object({
   ).optional(),
 }).catchall(z.unknown())
 
+const PublishedUrlSchema = z.string().url().refine(
+  value => /^https?:\/\//.test(value), 'addPublishedUrl must be an HTTP(S) URL'
+)
+
+/** Manual 발행 주소 list, seeded from the legacy single field when the list was never written. */
+function currentPublishedUrls(data: Record<string, unknown>): string[] {
+  if (Array.isArray(data.publishedUrls)) {
+    return data.publishedUrls.filter((u): u is string => typeof u === 'string' && u.length > 0)
+  }
+  return typeof data.publishedUrl === 'string' && data.publishedUrl ? [data.publishedUrl] : []
+}
+
 // POST: 외부에서 블로그 글 등록
 export const POST = createApiHandler({ auth: 'apiKey' }, async (request, { auth }) => {
   const body = await request.json()
@@ -122,6 +134,8 @@ export const GET = createApiHandler({ auth: 'apiKey' }, async (request, { auth }
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
         metadata: data.metadata || {},
+        publishedUrls: currentPublishedUrls(data),
+        publishedUrl: data.publishedUrl || null,
       },
     })
   }
@@ -193,8 +207,20 @@ export const PATCH = createApiHandler({ auth: 'apiKey' }, async (request, { auth
 
   const { docRef, data: existingData } = await getOwnedDocument('blog_posts', body.id, auth, '게시글', false)
 
+  // Validate before any write so a bad URL never produces a partial update.
+  const addPublishedUrl = body.addPublishedUrl !== undefined
+    ? PublishedUrlSchema.parse(body.addPublishedUrl)
+    : undefined
+
   const updateData: Record<string, unknown> = {
     updatedAt: Timestamp.now(),
+  }
+
+  // Append-only: keeps manual/WordPress addresses and the existing primary address.
+  if (addPublishedUrl) {
+    const urls = currentPublishedUrls(existingData)
+    updateData.publishedUrls = urls.includes(addPublishedUrl) ? urls : [...urls, addPublishedUrl]
+    if (!existingData.publishedUrl) updateData.publishedUrl = addPublishedUrl
   }
 
   // Merge metadata so changing a thumbnail preserves source/custom fields.
@@ -263,6 +289,8 @@ export const PATCH = createApiHandler({ auth: 'apiKey' }, async (request, { auth
       keywords: mergedData.keywords || [],
       products: mergedData.products || [],
       status: mergedData.status,
+      publishedUrls: currentPublishedUrls(mergedData),
+      publishedUrl: mergedData.publishedUrl || null,
       createdAt: existingData.createdAt?.toDate?.()?.toISOString() || null,
       updatedAt: (updateData.updatedAt as Timestamp).toDate().toISOString(),
     },
