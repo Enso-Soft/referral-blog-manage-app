@@ -27,6 +27,12 @@ const PublishPostSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
+const UpdateMetadataSchema = z.object({
+  thumbnailUrl: z.string().url().refine(
+    value => /^https?:\/\//.test(value), 'thumbnailUrl must be an HTTP(S) URL'
+  ).optional(),
+}).catchall(z.unknown())
+
 // POST: 외부에서 블로그 글 등록
 export const POST = createApiHandler({ auth: 'apiKey' }, async (request, { auth }) => {
   const body = await request.json()
@@ -191,10 +197,24 @@ export const PATCH = createApiHandler({ auth: 'apiKey' }, async (request, { auth
     updatedAt: Timestamp.now(),
   }
 
+  // Merge metadata so changing a thumbnail preserves source/custom fields.
+  // When content changes, the server-derived count wins over a stale client value.
+  if (body.metadata !== undefined) {
+    updateData.metadata = {
+      ...(existingData.metadata || {}),
+      ...UpdateMetadataSchema.parse(body.metadata),
+    }
+  }
   if (body.title !== undefined) updateData.title = body.title
   if (body.content !== undefined) {
     updateData.content = body.content
-    updateData['metadata.wordCount'] = countContentChars(body.content)
+    const wordCount = countContentChars(body.content)
+    if (updateData.metadata) {
+      const metadata = updateData.metadata as Record<string, unknown>
+      metadata.wordCount = wordCount
+    } else {
+      updateData['metadata.wordCount'] = wordCount
+    }
   }
   if (body.keywords !== undefined && Array.isArray(body.keywords)) updateData.keywords = body.keywords
   if (body.products !== undefined && Array.isArray(body.products)) {

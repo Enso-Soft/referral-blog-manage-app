@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 // server-only를 mock (테스트에서는 불필요)
 vi.mock('server-only', () => ({}))

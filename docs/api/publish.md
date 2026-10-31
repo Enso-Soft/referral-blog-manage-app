@@ -42,6 +42,8 @@ Create a new blog post.
 | `seoAnalysis` | object | No | SEO analysis data |
 | `threads` | object | No | Threads posting content |
 
+> Metadata is merged with existing values. When `content` is supplied, `metadata.wordCount` is recalculated from that content. Use GET by the same post ID to verify the saved thumbnail and body.
+
 > **Note:** Updating the `products` array will automatically update the `postType`. If `products` becomes non-empty, `postType` changes to 'affiliate'. If empty, it changes to 'general'.
 | `metadata` | object | No | Additional metadata |
 
@@ -272,7 +274,11 @@ Update a post.
 | `status` | string | No | `"draft"` or `"published"` |
 | `products` | object[] | No | Associated products array |
 | `seoAnalysis` | object | No | SEO analysis data (full replacement) |
+| `metadata` | object | No | Partial metadata merge; preserves omitted fields |
+| `metadata.thumbnailUrl` | string | No | New HTTP(S) thumbnail URL |
 | `threads` | object | No | Threads content (partial update supported) |
+
+> Metadata is merged with existing values. When `content` is supplied, `metadata.wordCount` is recalculated from that content. Use GET by the same post ID to verify the saved thumbnail and body.
 
 > **Note:** Updating the `products` array will automatically update the `postType`. If `products` becomes non-empty, `postType` changes to 'affiliate'. If empty, it changes to 'general'.
 
